@@ -379,14 +379,6 @@ export default function SystemsDB() {
         </div>
       </Card>
 
-      {/* Internet-facing callout */}
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3 text-sm">
-        <Globe size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
-        <div className="text-blue-800">
-          <strong>{internetCount} internet-facing systems</strong> are subject to the Likelihood floor policy (BP-042). All risk assessments for these systems must apply a minimum Likelihood score of 3.
-        </div>
-      </div>
-
       {/* Edit panel */}
       {selected && (
         <EditPanel
