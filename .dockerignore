@@ -1,0 +1,10 @@
+node_modules
+server/node_modules
+dist
+.env
+server/riskhub.db
+server/riskhub.db-shm
+server/riskhub.db-wal
+.git
+.claude
+.cursor

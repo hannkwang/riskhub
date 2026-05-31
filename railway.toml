@@ -1,8 +1,4 @@
-[build]
-command = "npm install && npm run build && npm install --prefix server"
-
 [deploy]
-startCommand = "node server/index.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
