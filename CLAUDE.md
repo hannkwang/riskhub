@@ -12,6 +12,12 @@ There is no authentication. Users are simulated via a role-switcher in the sideb
 
 ## Running the project
 
+**After cloning**, install dependencies in both directories:
+```bash
+npm install               # root (frontend)
+cd server && npm install  # backend
+```
+
 Two processes must run simultaneously — they are **not** managed by a single command.
 
 **Backend** (port 3001):
@@ -33,6 +39,8 @@ Vite proxies all `/api/*` requests to `http://localhost:3001`, so the frontend a
 ```bash
 npm run build                 # Production build to dist/
 npm run lint                  # ESLint (frontend only)
+./pentest.sh                  # API security test suite (requires backend running)
+./pentest.sh --with-ai        # Same, plus 2 live Claude API calls
 ```
 
 There are no tests.
@@ -72,7 +80,9 @@ src/
     BestPractices.jsx  # Admin: GRC best practice library
 ```
 
-Screens import `useUser()` from `UserContext` to get `currentUser` (with `.role`). All REST calls go through `api.*` methods in `lib/api.js`. The `ui.jsx` primitives own all badge colours and button variants — add new variants there rather than inline Tailwind. When adding a new role, update `ROLE_LABELS` in `UserContext.jsx` and `ROLE_COLORS` in `Layout.jsx`.
+Screens import `useUser()` from `UserContext` to get `currentUser` (with `.role`). All REST calls go through `api.*` methods in `lib/api.js`. `lib/api.js` sets the `X-Riskhub-User` header to the user's `id` (from the `users` table) on every request — this is what `getActor(req)` reads on the server.
+
+`src/lib/data.js` is static fixture data (mock risks, systems, users) left from early prototyping — no live screen imports it. All screens fetch from `/api`. The `ui.jsx` primitives own all badge colours and button variants — add new variants there rather than inline Tailwind. When adding a new role, update `ROLE_LABELS` in `UserContext.jsx` and `ROLE_COLORS` in `Layout.jsx`.
 
 ### Backend structure
 
