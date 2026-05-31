@@ -5,13 +5,14 @@ const cors    = require('cors');
 const path    = require('path');
 const fs      = require('fs');
 
-const risksRouter       = require('./routes/risks');
-const workflowRouter    = require('./routes/workflow');
-const reviewRouter      = require('./routes/review');
-const analyticsRouter   = require('./routes/analytics');
-const usersRouter       = require('./routes/users');
-const systemsRouter     = require('./routes/systems');
-const slaRouter           = require('./routes/sla');
+const { rateLimiter }        = require('./lib/rateLimiter');
+const risksRouter            = require('./routes/risks');
+const workflowRouter         = require('./routes/workflow');
+const reviewRouter           = require('./routes/review');
+const analyticsRouter        = require('./routes/analytics');
+const usersRouter            = require('./routes/users');
+const systemsRouter          = require('./routes/systems');
+const slaRouter              = require('./routes/sla');
 const notificationsRouter    = require('./routes/notifications');
 const portalSettingsRouter   = require('./routes/portal-settings');
 
@@ -52,6 +53,10 @@ app.use((_req, res, next) => {
   }
   next();
 });
+
+// Global rate limit: 100 requests/min per IP across all API endpoints.
+// The /api/review endpoint applies a tighter per-actor limit on top of this.
+app.use('/api', rateLimiter({ limit: 100, windowMs: 60_000 }));
 
 app.use('/api/risks',          risksRouter);
 app.use('/api/workflow',       workflowRouter);

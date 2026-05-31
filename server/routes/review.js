@@ -2,38 +2,14 @@ const express = require('express');
 const db = require('../db');
 const { reviewRisk } = require('../lib/claude');
 const { getActor } = require('../lib/auth');
+const { createKeyedLimiter } = require('../lib/rateLimiter');
 
 const router = express.Router();
 
-// In-memory rate limiter: max 10 review calls per actor (or IP if unauthenticated)
-// per minute. Keying on the actor prevents one user from starving others on the
-// same proxy/NAT IP; keying on IP for unauthenticated requests still throttles
-// anonymous probes. The map is pruned on every check so entries do not grow
-// unboundedly with new IPs/actors.
-const reviewCallLog = new Map();
-const RATE_LIMIT = 10;
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(key) {
-  const now = Date.now();
-  const calls = (reviewCallLog.get(key) || []).filter(t => now - t < RATE_WINDOW_MS);
-  if (calls.length >= RATE_LIMIT) {
-    reviewCallLog.set(key, calls);
-    return false;
-  }
-  calls.push(now);
-  reviewCallLog.set(key, calls);
-
-  // Opportunistic prune: drop any keys whose windows have fully expired.
-  if (reviewCallLog.size > 1000) {
-    for (const [k, ts] of reviewCallLog) {
-      if (!ts.length || now - ts[ts.length - 1] >= RATE_WINDOW_MS) {
-        reviewCallLog.delete(k);
-      }
-    }
-  }
-  return true;
-}
+// Tighter per-actor limit (10/min) on top of the global 100/min IP limit in
+// index.js. Keying on actor id prevents one user consuming the shared IP quota
+// on a NAT/proxy; falls back to IP for unauthenticated requests.
+const checkReviewLimit = createKeyedLimiter({ limit: 10, windowMs: 60_000 });
 
 // Input length caps to prevent excessive token consumption
 const MAX_STATEMENT_LEN = 2000;
@@ -48,7 +24,7 @@ function truncate(str, max) {
 router.post('/', async (req, res) => {
   const actor = getActor(req);
   const rateKey = actor ? `u:${actor.id}` : `ip:${req.ip}`;
-  if (!checkRateLimit(rateKey)) {
+  if (!checkReviewLimit(rateKey)) {
     return res.status(429).json({ error: 'Too many review requests. Please wait a minute and try again.' });
   }
 
