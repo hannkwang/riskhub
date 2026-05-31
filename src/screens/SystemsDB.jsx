@@ -77,7 +77,7 @@ export default function SystemsDB() {
   const [SYSTEMS, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [critFilter, setCritFilter] = useState('all');
+  const [rmlFilter, setRmlFilter]   = useState('all');
   const [inetFilter, setInetFilter] = useState('all');
   const [sort, setSort] = useState({ field: 'crit', dir: 'asc' });
 
@@ -97,14 +97,14 @@ export default function SystemsDB() {
     setSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
   }
 
-  const crits = ['all', 'Critical', 'High', 'Medium', 'Low'];
+  const rmls = ['all', 'High', 'Medium', 'Low'];
 
   const filtered = SYSTEMS
     .filter(s => {
       const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.owner.toLowerCase().includes(search.toLowerCase()) || s.team.toLowerCase().includes(search.toLowerCase());
-      const matchCrit = critFilter === 'all' || s.crit === critFilter;
+      const matchRml  = rmlFilter === 'all' || s.rml === rmlFilter;
       const matchInet = inetFilter === 'all' || (inetFilter === 'yes' ? s.inet : !s.inet);
-      return matchSearch && matchCrit && matchInet;
+      return matchSearch && matchRml && matchInet;
     })
     .sort((a, b) => {
       let av, bv;
@@ -161,15 +161,15 @@ export default function SystemsDB() {
           />
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {crits.map(c => (
+          {rmls.map(r => (
             <button
-              key={c}
-              onClick={() => setCritFilter(c)}
+              key={r}
+              onClick={() => setRmlFilter(r)}
               className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                critFilter === c ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                rmlFilter === r ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {c === 'all' ? 'All criticality' : c}
+              {r === 'all' ? 'All RML' : `RML: ${r}`}
             </button>
           ))}
         </div>

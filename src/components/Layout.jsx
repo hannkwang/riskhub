@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, CheckSquare, BarChart2,
   Users, Database, BookOpen, Shield, Bell, Search, Menu, X, ChevronDown,
+  Check, RotateCcw, AlertTriangle, Clock,
 } from 'lucide-react';
 import { useUser, ROLE_LABELS } from '../contexts/UserContext';
+import { api } from '../lib/api';
 
 const NAV = [
   { to: '/',           label: 'Dashboard',    icon: LayoutDashboard },
@@ -15,9 +17,11 @@ const NAV = [
 ];
 
 const ADMIN_NAV = [
-  { to: '/admin/users',    label: 'Users & Roles', icon: Users },
-  { to: '/admin/systems',  label: 'Systems DB',    icon: Database },
-  { to: '/admin/practices',label: 'Best Practices',icon: BookOpen },
+  { to: '/admin/risk-db',  label: 'Risks DB',       icon: Shield },
+  { to: '/admin/systems',  label: 'Systems DB',     icon: Database },
+  { to: '/admin/practices',label: 'Best Practices', icon: BookOpen },
+  { to: '/admin/users',    label: 'Users & Roles',  icon: Users },
+  { to: '/admin/sla',      label: 'SLA Settings',   icon: Bell },
 ];
 
 const ROLE_COLORS = {
@@ -49,6 +53,132 @@ function NavItem({ to, label, icon: Icon, onClick }) {
         </>
       )}
     </NavLink>
+  );
+}
+
+const ACTION_ICON = {
+  approve:         <Check size={12} className="text-emerald-600" />,
+  auto_approve:    <Check size={12} className="text-emerald-600" />,
+  reject:          <X size={12} className="text-red-500" />,
+  request_changes: <RotateCcw size={12} className="text-amber-500" />,
+  route_back:      <RotateCcw size={12} className="text-amber-500" />,
+  raiser_respond:  <Check size={12} className="text-blue-500" />,
+  submit:          <Clock size={12} className="text-slate-400" />,
+};
+
+const ACTION_LABEL = {
+  submit:          'submitted for review',
+  approve:         'approved',
+  reject:          'rejected',
+  request_changes: 'requested changes',
+  route_back:      'routed back',
+  raiser_respond:  'responded',
+  auto_approve:    'fully approved',
+};
+
+function NotificationBell({ currentUser }) {
+  const [open, setOpen]         = useState(false);
+  const [items, setItems]       = useState([]);
+  const [unread, setUnread]     = useState(0);
+  const panelRef                = useRef(null);
+
+  const lsKey = currentUser ? `riskhub_notif_seen_${currentUser.id}` : null;
+
+  function getLastSeen() {
+    try { return lsKey ? (localStorage.getItem(lsKey) || '') : ''; } catch { return ''; }
+  }
+  function markSeen() {
+    try { if (lsKey) localStorage.setItem(lsKey, new Date().toISOString().replace('T', ' ').slice(0, 19)); } catch {}
+  }
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const since = getLastSeen();
+    api.getNotifications(since)
+      .then(data => {
+        setItems(data);
+        setUnread(data.filter(n => n.is_new).length);
+      })
+      .catch(() => {});
+  }, [currentUser?.id]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e) {
+      if (panelRef.current && !panelRef.current.contains(e.target)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  function toggle() {
+    if (!open) {
+      markSeen();
+      setUnread(0);
+    }
+    setOpen(o => !o);
+  }
+
+  return (
+    <div className="relative" ref={panelRef}>
+      <button onClick={toggle} className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100">
+        <Bell size={18} />
+        {unread > 0 && (
+          <span className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-red-500 ring-2 ring-white flex items-center justify-center text-white text-[9px] font-bold px-0.5">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+        {unread === 0 && items.length > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-slate-300 ring-2 ring-white" />
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-800">Notifications</span>
+            {items.length > 0 && (
+              <span className="text-xs text-slate-400">{items.length} recent</span>
+            )}
+          </div>
+
+          <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
+            {items.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <Bell size={24} className="text-slate-200 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">No recent activity</p>
+              </div>
+            ) : items.map(n => (
+              <Link
+                key={n.id}
+                to={`/risk/${n.risk_id}`}
+                onClick={() => setOpen(false)}
+                className={`block px-4 py-3 hover:bg-slate-50 transition-colors ${n.is_new ? 'bg-blue-50/50' : ''}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center">
+                    {ACTION_ICON[n.action] || <Bell size={11} className="text-slate-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-slate-800 leading-snug">
+                      <span className="font-semibold">{n.actor_name}</span>
+                      {' '}{ACTION_LABEL[n.action] || n.action.replace('_', ' ')}{' '}
+                      <span className="font-mono text-slate-500">{n.risk_id}</span>
+                    </p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">{n.risk_title}</p>
+                    {n.comment && (
+                      <p className="text-xs text-slate-400 italic truncate mt-0.5">"{n.comment}"</p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-1">{n.time_ago}</p>
+                  </div>
+                  {n.is_new && <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -185,10 +315,7 @@ export default function Layout() {
                 {ROLE_LABELS[currentUser.role]}
               </span>
             )}
-            <button className="relative p-2 rounded-lg text-slate-500 hover:bg-slate-100">
-              <Bell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
-            </button>
+            <NotificationBell currentUser={currentUser} />
           </div>
         </header>
 

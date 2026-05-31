@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertTriangle, Clock, CheckCircle,
+  AlertTriangle, Clock,
   ArrowUpDown, Filter, Download, Plus, ChevronRight, CalendarClock,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { parseUtc, timeAgo, formatDate } from '../lib/time';
 import { Badge, RiskBadge, StageBadge, Avatar, Button, Card, KpiCard, PageHeader, Select } from '../components/ui';
 
-const STAGE_ORDER = ['Draft','Biz Owner','Cyber Review','Governance','Approved','Rejected'];
+const STAGE_ORDER = ['Draft', 'System Owner', 'Concurrent Review', 'Approved', 'Rejected'];
+const SLA_DEFAULTS = { 'Draft': 14, 'System Owner': 3, 'Concurrent Review': 7 };
 
 function daysUntil(isoDate) {
   if (!isoDate) return null;
-  const diff = new Date(isoDate) - new Date(new Date().toDateString());
+  const diff = parseUtc(isoDate) - new Date(new Date().toDateString());
   return Math.ceil(diff / 86400000);
 }
 
@@ -41,6 +43,7 @@ function ExpiryChip({ expiresAt }) {
 
 export default function Dashboard() {
   const [risks, setRisks]               = useState([]);
+  const [slaDays, setSlaDays]           = useState(SLA_DEFAULTS);
   const [loading, setLoading]           = useState(true);
   const [filterLevel, setFilterLevel]   = useState('');
   const [filterStage, setFilterStage]   = useState('');
@@ -50,26 +53,36 @@ export default function Dashboard() {
   const [activeKpi, setActiveKpi]       = useState(null);
 
   useEffect(() => {
-    api.getRisks()
-      .then(setRisks)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.getRisks(),
+      api.getSla().catch(() => []),
+    ]).then(([r, slaRows]) => {
+      setRisks(r);
+      if (slaRows.length) {
+        const map = { ...SLA_DEFAULTS };
+        slaRows.forEach(s => { map[s.stage] = s.days; });
+        setSlaDays(map);
+      }
+    }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   const owners = [...new Set(risks.map((r) => r.owner).filter(Boolean))];
-  const expiringSoon = risks.filter(r => { const d = daysUntil(r.expiresAt); return d !== null && d <= 90; });
-  const openRisks = risks.filter(r => r.stage !== 'Approved' && r.stage !== 'Rejected');
-  const highRisks = risks.filter(r => r.level === 'High');
-  const awaitingCyber = risks.filter(r => r.stage === 'Cyber Review');
+  const highOpenRisks = risks.filter(r => r.score >= 15 && r.stage !== 'Approved' && r.stage !== 'Rejected');
+  const slaBreaches = risks.filter(r => {
+    const sla = slaDays[r.stage];
+    if (!sla) return false;
+    return (Date.now() - new Date(r.updated_at).getTime()) / 86400000 > sla;
+  });
+  const expiringSoon = risks.filter(r => { const d = daysUntil(r.expiresAt); return d !== null && d <= 30; });
 
   const filtered = risks
     .filter((r) => {
       if (filterLevel && r.level !== filterLevel) return false;
       if (filterStage && r.stage !== filterStage) return false;
       if (filterOwner && r.owner !== filterOwner) return false;
-      if (activeKpi === 'awaiting')  return r.stage === 'Cyber Review';
-      if (activeKpi === 'high')      return r.level === 'High';
-      if (activeKpi === 'expiring')  return daysUntil(r.expiresAt) !== null && daysUntil(r.expiresAt) <= 90;
+      if (activeKpi === 'high_open') return r.score >= 15 && r.stage !== 'Approved' && r.stage !== 'Rejected';
+      if (activeKpi === 'sla')       { const sla = slaDays[r.stage]; return !!sla && (Date.now() - new Date(r.updated_at).getTime()) / 86400000 > sla; }
+      if (activeKpi === 'expiring')  return daysUntil(r.expiresAt) !== null && daysUntil(r.expiresAt) <= 30;
       return true;
     })
     .sort((a, b) => {
@@ -121,38 +134,26 @@ export default function Dashboard() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <KpiCard
-          label="Awaiting Cyber review"
-          value={awaitingCyber.length}
-          sub="In Cyber Review stage"
-          icon={Clock}
+          label="High open risks"
+          value={highOpenRisks.length}
+          sub="Score ≥ 15, not yet approved"
+          icon={AlertTriangle}
           accent
-          onClick={() => setActiveKpi(activeKpi === 'awaiting' ? null : 'awaiting')}
+          onClick={() => setActiveKpi(activeKpi === 'high_open' ? null : 'high_open')}
         />
         <KpiCard
-          label="Open risks"
-          value={openRisks.length}
-          sub="Across all stages"
-          icon={AlertTriangle}
-        />
-        <KpiCard
-          label="High risk items"
-          value={highRisks.length}
-          sub="Require prioritisation"
-          icon={AlertTriangle}
-          onClick={() => setActiveKpi(activeKpi === 'high' ? null : 'high')}
-        />
-        <KpiCard
-          label="Approved"
-          value={risks.filter(r => r.stage === 'Approved').length}
-          sub="Total approved"
-          icon={CheckCircle}
+          label="SLA breaches"
+          value={slaBreaches.length}
+          sub="Past stage deadline"
+          icon={Clock}
+          onClick={() => setActiveKpi(activeKpi === 'sla' ? null : 'sla')}
         />
         <KpiCard
           label="Expiring soon"
           value={expiringSoon.length}
-          sub="Within 90 days"
+          sub="Approved, within 30 days"
           icon={CalendarClock}
           onClick={() => setActiveKpi(activeKpi === 'expiring' ? null : 'expiring')}
         />
@@ -162,7 +163,7 @@ export default function Dashboard() {
         <div className="mb-4 flex items-center gap-2">
           <span className="text-sm text-slate-600">Filtering by:</span>
           <Badge variant="primary" size="md" className="flex items-center gap-1">
-            {activeKpi === 'awaiting' ? 'Awaiting Cyber review' : activeKpi === 'expiring' ? 'Expiring soon' : 'High risk'}
+            {activeKpi === 'high_open' ? 'High open risks' : activeKpi === 'sla' ? 'SLA breaches' : 'Expiring soon'}
             <button onClick={() => setActiveKpi(null)} className="ml-1 hover:text-blue-900">✕</button>
           </Badge>
         </div>
@@ -194,7 +195,7 @@ export default function Dashboard() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="text-left px-4 py-3 w-32"><SortHeader col="id">Risk ID</SortHeader></th>
-                  <th className="text-left px-4 py-3"><SortHeader col="title">Risk Statement</SortHeader></th>
+                  <th className="text-left px-4 py-3"><SortHeader col="title">Risk Title</SortHeader></th>
                   <th className="text-left px-4 py-3 w-40 hidden md:table-cell"><SortHeader col="owner">Owner</SortHeader></th>
                   <th className="text-center px-3 py-3 w-16 hidden lg:table-cell"><SortHeader col="impact">Imp.</SortHeader></th>
                   <th className="text-center px-3 py-3 w-16 hidden lg:table-cell"><SortHeader col="likelihood">Lik.</SortHeader></th>
@@ -232,7 +233,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3 text-center"><RiskBadge level={r.level} /></td>
                     <td className="px-4 py-3 hidden sm:table-cell"><StageBadge stage={r.stage} /></td>
                     <td className="px-4 py-3 text-right hidden md:table-cell">
-                      <span className="text-xs text-slate-400">{r.updated}</span>
+                      <span className="text-xs text-slate-400">{timeAgo(r.updated_at)}</span>
                     </td>
                     <td className="px-4 py-3 hidden xl:table-cell">
                       {r.expiresAt ? <ExpiryChip expiresAt={r.expiresAt} /> : <span className="text-xs text-slate-300">—</span>}

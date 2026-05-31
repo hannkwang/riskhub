@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader, Card, Badge, RiskBadge } from '../components/ui';
-import { AlertTriangle, Clock, CheckCircle, Users, RotateCcw, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Clock, CheckCircle, Users, RotateCcw, ChevronRight, CalendarClock } from 'lucide-react';
 import { api } from '../lib/api';
+
+function sixMonthsAgo() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
+  return d.toISOString().split('T')[0];
+}
 
 const ROLE_DISPLAY = {
   security:       'Cyber Security',
@@ -38,24 +44,21 @@ function StatusDot({ status }) {
 }
 
 export default function Analytics() {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [dateMode, setDateMode] = useState('6m');
+  const [customDate, setCustomDate] = useState(sixMonthsAgo());
+
+  const fromDate = dateMode === '6m' ? sixMonthsAgo() : customDate;
 
   useEffect(() => {
-    api.getAnalytics()
+    setLoading(true);
+    const params = fromDate ? { from_date: fromDate } : {};
+    api.getAnalytics(params)
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <>
-        <PageHeader title="Approval Status & Timelines" subtitle="Loading…" />
-        <Card className="py-12 text-center text-sm text-slate-400">Fetching data…</Card>
-      </>
-    );
-  }
+  }, [fromDate]);
 
   const { kpi = {}, systemOwnerRisks = [], concurrentPendingByPerson = [], inFlight = [], stageTiming = [], routeBacksByPerson = [] } = data || {};
 
@@ -72,7 +75,27 @@ export default function Analytics() {
       <PageHeader
         title="Approval Status & Timelines"
         subtitle={`${kpi.totalOpen ?? 0} open · ${kpi.approved ?? 0} approved of ${kpi.totalRisks ?? 0} total`}
+        actions={
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <button onClick={() => setDateMode('6m')}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${dateMode === '6m' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                <CalendarClock size={12} /> Past 6 months
+              </button>
+              <button onClick={() => setDateMode('custom')}
+                className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${dateMode === 'custom' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Custom
+              </button>
+            </div>
+            {dateMode === 'custom' && (
+              <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
+                className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            )}
+          </div>
+        }
       />
+
+      <div className={`transition-opacity ${loading ? 'opacity-40 pointer-events-none' : ''}`}>
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
@@ -277,6 +300,7 @@ export default function Analytics() {
           </div>
         )}
       </Card>
+      </div>
     </>
   );
 }

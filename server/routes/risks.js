@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { requireActor } = require('../lib/auth');
+const { requireActor, getActor } = require('../lib/auth');
 
 const router = express.Router();
 
@@ -11,15 +11,15 @@ function computeLevel(score) {
   return 'Very Low';
 }
 
+function parseUtc(s) { const t = s.includes('T') ? s : s.replace(' ', 'T'); return new Date(t.endsWith('Z') ? t : t + 'Z'); }
 function timeAgo(isoStr) {
   if (!isoStr) return '';
-  const diff = Date.now() - new Date(isoStr).getTime();
+  const diff = Date.now() - parseUtc(isoStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60)   return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
   if (hours < 24)  return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function formatRisk(r) {
@@ -62,6 +62,7 @@ function formatRisk(r) {
 
 // GET /api/risks
 router.get('/', (req, res) => {
+  const actor = getActor(req);
   const { stage, level, owner, created_by } = req.query;
   let sql = 'SELECT * FROM risks WHERE 1=1';
   const params = [];
@@ -76,6 +77,14 @@ router.get('/', (req, res) => {
   if (owner) { sql += ' AND owner = ?'; params.push(owner); }
   if (created_by) { sql += ' AND created_by = ?'; params.push(created_by); }
 
+  // Draft risks are private — only visible to their creator
+  if (actor) {
+    sql += " AND (stage != 'Draft' OR created_by = ?)";
+    params.push(actor.id);
+  } else {
+    sql += " AND stage != 'Draft'";
+  }
+
   sql += ' ORDER BY updated_at DESC';
   const rows = db.prepare(sql).all(...params);
   const risks = rows.map(formatRisk);
@@ -89,6 +98,12 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Risk not found' });
+  if (row.stage === 'Draft') {
+    const actor = getActor(req);
+    if (!actor || actor.id !== row.created_by) {
+      return res.status(404).json({ error: 'Risk not found' });
+    }
+  }
   res.json(formatRisk(row));
 });
 

@@ -10,9 +10,9 @@ const CONCURRENT_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
 const TEAM_BASED_ROLES = new Set(['security', 'tech_governance']);
 
 // Returns true when all three groups have their approval requirement met:
-//   security:       at least 1 approved
+//   security:        at least 1 approved
 //   tech_governance: at least 1 approved
-//   grc_chair:      ALL members approved
+//   grc_chair:       ALL co-chairs must individually approve
 function allTeamsApproved(riskId) {
   const secOk = db.prepare(
     "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND status = 'approved'"
@@ -47,9 +47,10 @@ const ROLE_STAGE = {
   grc_chair:      'Concurrent Review',
 };
 
+function parseUtc(s) { const t = s.includes('T') ? s : s.replace(' ', 'T'); return new Date(t.endsWith('Z') ? t : t + 'Z'); }
 function timeAgo(isoStr) {
   if (!isoStr) return '';
-  const diff = Date.now() - new Date(isoStr).getTime();
+  const diff = Date.now() - parseUtc(isoStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60)  return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
@@ -57,8 +58,10 @@ function timeAgo(isoStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function computeExpiry(risk) {
-  const months = risk.review_period_months || 6;
+function computeExpiry() {
+  const setting = db.prepare("SELECT value FROM portal_settings WHERE key = 'review_period_months'").get();
+  const months = setting ? parseInt(setting.value) : 12;
+  // End of the same calendar month, N months after approval date
   const exp = new Date();
   exp.setDate(1);
   exp.setMonth(exp.getMonth() + months + 1, 0);
@@ -130,7 +133,7 @@ router.post('/:id/transition', (req, res) => {
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
   let expiresAt = risk.expires_at;
-  if (toStage === 'Approved') expiresAt = computeExpiry(risk);
+  if (toStage === 'Approved') expiresAt = computeExpiry();
 
   db.transaction(() => {
     db.prepare('UPDATE risks SET stage = ?, updated_at = ?, expires_at = ? WHERE id = ?')
@@ -201,7 +204,7 @@ router.post('/:id/concurrent', (req, res) => {
     // Auto-approve when all team requirements are met
     if (action === 'approve') {
       if (allTeamsApproved(risk.id)) {
-        const expiresAt = computeExpiry(risk);
+        const expiresAt = computeExpiry();
         db.prepare('UPDATE risks SET stage = ?, updated_at = ?, expires_at = ? WHERE id = ?')
           .run('Approved', now, expiresAt, risk.id);
         db.prepare(`
@@ -220,15 +223,16 @@ router.post('/:id/raiser-respond', (req, res) => {
   const actor = requireActor(req, res);
   if (!actor) return;
 
-  if (actor.role !== 'engineer') {
-    return res.status(403).json({ error: 'Only engineers can respond to route-backs' });
-  }
-
   const { comment } = req.body;
   if (!comment?.trim()) return res.status(400).json({ error: 'comment is required' });
 
   const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!risk) return res.status(404).json({ error: 'Risk not found' });
+
+  if (actor.id !== risk.created_by && actor.role !== 'engineer') {
+    return res.status(403).json({ error: 'Only the risk creator or an engineer can respond to route-backs' });
+  }
+
   if (risk.stage !== 'Concurrent Review') {
     return res.status(400).json({ error: 'Risk is not in Concurrent Review stage' });
   }
@@ -300,15 +304,17 @@ router.get('/queue/:role', (req, res) => {
       ORDER BY stage_entered_at ASC
     `).all(actor.name);
   } else {
+    const actor = getActor(req);
+    if (!actor) return res.status(401).json({ error: 'Missing or unknown X-Riskhub-User header' });
     rows = db.prepare(`
       SELECT r.*, (
         SELECT MAX(wh.created_at) FROM workflow_history wh
         WHERE wh.risk_id = r.id AND wh.to_stage = r.stage
       ) as stage_entered_at
       FROM risks r
-      WHERE r.stage = ?
+      WHERE r.stage = ? AND r.created_by = ?
       ORDER BY stage_entered_at ASC
-    `).all(stage);
+    `).all(stage, actor.id);
   }
 
   const items = rows.map(r => {

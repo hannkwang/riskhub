@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, Send, Sparkles, AlertTriangle,
+  ChevronLeft, Send, Save, Sparkles, AlertTriangle,
   Check, ChevronRight, Info, RotateCcw, X, Plus, Trash2,
-  CalendarClock, Bell, Loader,
+  Loader,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useUser } from '../contexts/UserContext';
@@ -66,6 +66,7 @@ export default function NewRisk() {
   const [systems, setSystems] = useState([]);
   const [system, setSystem]   = useState(null);
 
+  const [title, setTitle]             = useState('');
   const [statement, setStatement]     = useState('');
   const [impact, setImpact]           = useState(3);
   const [likelihood, setLikelihood]   = useState(3);
@@ -75,15 +76,15 @@ export default function NewRisk() {
     { id: 1, text: '', owner: '', due: '', type: 'preventive' },
   ]);
   const [justification, setJustification] = useState('');
-  const [expiryMonths, setExpiryMonths]   = useState(6);
 
   const [aiResult, setAiResult]     = useState(null);
   const [aiLoading, setAiLoading]   = useState(false);
   const [aiError, setAiError]       = useState(null);
   const [aiDismissed, setAiDismissed] = useState({});
 
-  const [submitting, setSubmitting] = useState(false);
-  const [riskId, setRiskId]         = useState(null);
+  const [submitting, setSubmitting]   = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [riskId, setRiskId]           = useState(null);
 
   useEffect(() => {
     api.getSystems()
@@ -99,7 +100,7 @@ export default function NewRisk() {
                                      : 'text-emerald-700 bg-emerald-50 border-emerald-200';
 
   async function runAiReview() {
-    if (!statement.trim()) { setAiError('Please enter a risk statement first.'); return; }
+    if (!statement.trim()) { setAiError('Please enter a risk description first.'); return; }
     setAiLoading(true);
     setAiError(null);
     setAiResult(null);
@@ -123,36 +124,53 @@ export default function NewRisk() {
     }
   }
 
+  function buildRiskPayload() {
+    return {
+      title: title.trim(),
+      risk_statement: statement,
+      owner: currentUser?.name,
+      team: currentUser?.team,
+      system_name: system?.name,
+      impact,
+      likelihood,
+      residual_impact: residualI,
+      residual_likelihood: residualL,
+      ai_residual_impact: aiResult?.proposed_residual_impact || null,
+      ai_residual_likelihood: aiResult?.proposed_residual_likelihood || null,
+      mitigations: mitigations.filter(m => m.text),
+      justification,
+    };
+  }
+
+  async function handleSaveDraft() {
+    if (!title.trim()) { alert('Please enter a risk title.'); return; }
+    if (!statement.trim()) { alert('Please enter a risk description.'); return; }
+    setSavingDraft(true);
+    try {
+      const created = await api.createRisk(buildRiskPayload());
+      navigate(`/risk/${created.id}`);
+    } catch (e) {
+      alert(`Failed to save draft: ${e.message}`);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   async function handleSubmit() {
-    if (!statement.trim()) { alert('Please enter a risk statement.'); return; }
+    if (!title.trim()) { alert('Please enter a risk title.'); return; }
+    if (!statement.trim()) { alert('Please enter a risk description.'); return; }
     setSubmitting(true);
     try {
-      const created = await api.createRisk({
-        risk_statement: statement,
-        owner: currentUser?.name,
-        team: currentUser?.team,
-        system_name: system?.name,
-        impact,
-        likelihood,
-        residual_impact: residualI,
-        residual_likelihood: residualL,
-        ai_residual_impact: aiResult?.proposed_residual_impact || null,
-        ai_residual_likelihood: aiResult?.proposed_residual_likelihood || null,
-        mitigations: mitigations.filter(m => m.text),
-        justification,
-        review_period_months: expiryMonths,
-      });
+      const created = await api.createRisk(buildRiskPayload());
 
       // Submit for review (Draft → Biz Owner). If this step fails, the Draft
       // has already been persisted — navigate to its detail page so the user
       // can retry the transition rather than re-creating a duplicate risk.
       try {
-        if (currentUser?.role === 'engineer') {
-          await api.transition(created.id, {
-            action: 'submit',
-            comment: 'Submitted for business owner review.',
-          });
-        }
+        await api.transition(created.id, {
+          action: 'submit',
+          comment: 'Submitted for business owner review.',
+        });
       } catch (transitionErr) {
         alert(`Draft saved (${created.id}) but submission failed: ${transitionErr.message}. You can resubmit from the risk page.`);
       }
@@ -186,7 +204,10 @@ export default function NewRisk() {
               {aiLoading ? <Loader size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {aiLoading ? 'Reviewing…' : 'Review with AI'}
             </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={submitting || !currentUser}>
+            <Button variant="secondary" size="sm" onClick={handleSaveDraft} disabled={savingDraft || submitting || !currentUser}>
+              <Save size={14} /> {savingDraft ? 'Saving…' : 'Save Draft'}
+            </Button>
+            <Button size="sm" onClick={handleSubmit} disabled={submitting || savingDraft || !currentUser}>
               <Send size={14} /> {submitting ? 'Submitting…' : 'Submit for review'}
             </Button>
           </div>
@@ -211,7 +232,18 @@ export default function NewRisk() {
             <section>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Background / Context</div>
               <div className="mb-5">
-                <FieldLabel num="1" label="System" hint="required" />
+                <FieldLabel num="1" label="Risk Title" hint="required" />
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Short, descriptive title for this risk…"
+                  className="w-full text-sm border border-slate-300 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="mb-5">
+                <FieldLabel num="2" label="System" hint="required" />
                 <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                   <select
                     value={system?.name || ''}
@@ -255,7 +287,7 @@ export default function NewRisk() {
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Risk & Impact</div>
 
               <div className="mb-5">
-                <FieldLabel num="2" label="Risk Statement" hint="cause → event → consequence" aiTag={!!aiResult} />
+                <FieldLabel num="3" label="Risk Description" hint="cause → event → consequence" aiTag={!!aiResult} />
                 <textarea
                   value={statement}
                   onChange={(e) => setStatement(e.target.value)}
@@ -270,7 +302,7 @@ export default function NewRisk() {
 
               <div className="grid sm:grid-cols-2 gap-5 mb-5">
                 <div>
-                  <FieldLabel num="3" label="Impact" />
+                  <FieldLabel num="4" label="Impact" />
                   <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-2xl font-bold text-slate-900">{impact}</span>
@@ -287,7 +319,7 @@ export default function NewRisk() {
                 </div>
 
                 <div>
-                  <FieldLabel num="4" label="Likelihood" />
+                  <FieldLabel num="5" label="Likelihood" />
                   <div className={`bg-white border rounded-xl p-4 shadow-sm ${system?.internet_facing && likelihood < 3 ? 'border-red-300 bg-red-50' : 'border-slate-200'}`}>
                     <div className="flex items-center justify-between mb-3">
                       <span className={`text-2xl font-bold ${system?.internet_facing && likelihood < 3 ? 'text-red-700' : 'text-slate-900'}`}>{likelihood}</span>
@@ -311,7 +343,7 @@ export default function NewRisk() {
               </div>
 
               <div>
-                <FieldLabel num="5" label="Risk Level" hint="auto-calculated" />
+                <FieldLabel num="6" label="Risk Level" hint="auto-calculated" />
                 <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-wrap items-center gap-6">
                   <RiskMatrix impact={impact} likelihood={likelihood} />
                   <div>
@@ -327,7 +359,7 @@ export default function NewRisk() {
             {/* Mitigations */}
             <section>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Mitigations</div>
-              <FieldLabel num="6" label="Mitigation Measures" />
+              <FieldLabel num="7" label="Mitigation Measures" />
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="grid text-xs font-semibold text-slate-500 uppercase tracking-wider bg-slate-50 px-4 py-2.5 border-b border-slate-200"
                   style={{ gridTemplateColumns: '1fr 90px 80px 110px 32px' }}>
@@ -366,7 +398,7 @@ export default function NewRisk() {
               <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Residual Risk</div>
               <div className="grid sm:grid-cols-2 gap-5 mb-4">
                 <div>
-                  <FieldLabel num="7" label="Residual Impact" />
+                  <FieldLabel num="8" label="Residual Impact" />
                   <input type="range" min={1} max={5} value={residualI} onChange={e => setResidualI(+e.target.value)}
                     className="w-full accent-blue-700 cursor-pointer mt-2" />
                   <div className="flex justify-between text-xs text-slate-400 mt-1">
@@ -374,7 +406,7 @@ export default function NewRisk() {
                   </div>
                 </div>
                 <div>
-                  <FieldLabel num="8" label="Residual Likelihood" />
+                  <FieldLabel num="9" label="Residual Likelihood" />
                   <input type="range" min={1} max={5} value={residualL} onChange={e => setResidualL(+e.target.value)}
                     className="w-full accent-blue-700 cursor-pointer mt-2" />
                   <div className="flex justify-between text-xs text-slate-400 mt-1">
@@ -389,35 +421,17 @@ export default function NewRisk() {
 
             {/* Justification */}
             <section>
-              <FieldLabel num="9" label="Justification" hint="Why is this residual level acceptable?" aiTag={!!aiResult} />
+              <FieldLabel num="10" label="Justification" hint="Why is this residual level acceptable?" aiTag={!!aiResult} />
               <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={4}
                 placeholder="Explain why mitigations reduce risk to an acceptable level…"
                 className="w-full text-sm border border-slate-300 rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
             </section>
 
-            {/* Review period */}
-            <section>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Review & Expiry</div>
-              <FieldLabel num="10" label="Review period" />
-              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-                <div className="grid grid-cols-4 gap-3">
-                  {[3, 6, 9, 12].map((m) => (
-                    <button key={m} type="button" onClick={() => setExpiryMonths(m)}
-                      className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border-2 text-sm font-semibold transition-colors ${
-                        expiryMonths === m
-                          ? 'border-blue-700 bg-blue-50 text-blue-700'
-                          : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                      }`}>
-                      <CalendarClock size={16} className={expiryMonths === m ? 'text-blue-600' : 'text-slate-400'} />
-                      {m} months
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            <div className="flex justify-end pt-2 pb-8">
-              <Button onClick={handleSubmit} disabled={submitting || !currentUser}>
+            <div className="flex justify-end gap-2 pt-2 pb-8">
+              <Button variant="secondary" onClick={handleSaveDraft} disabled={savingDraft || submitting || !currentUser}>
+                <Save size={14} /> {savingDraft ? 'Saving…' : 'Save Draft'}
+              </Button>
+              <Button onClick={handleSubmit} disabled={submitting || savingDraft || !currentUser}>
                 <Send size={14} /> {submitting ? 'Submitting…' : 'Submit for review'}
               </Button>
             </div>

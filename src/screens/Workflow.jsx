@@ -146,7 +146,8 @@ export default function Workflow() {
   const myApprovalRow = isConcurrentReviewer
     ? concurrentStatus.find(r => r.actor_id === currentUser.id)
     : null;
-  const isRaiser = isConcurrentStage && currentUser?.role === 'engineer';
+  const isRaiser = isConcurrentStage && currentUser && (currentUser.id === risk.created_by || currentUser.role === 'engineer');
+  const canSubmit = risk.stage === 'Draft' && currentUser && (currentUser.id === risk.created_by || currentUser.role === 'engineer');
   const routedBackRows = concurrentStatus.filter(r => r.status === 'routed_back');
 
   const comments = history.filter(h => h.comment && h.action !== 'create' && h.action !== 'ai_review');
@@ -233,11 +234,16 @@ export default function Workflow() {
                     <div className={`text-xs font-semibold ${isActive ? 'text-blue-700' : isDone ? 'text-slate-700' : 'text-slate-400'}`}>
                       {stageName}
                     </div>
-                    {stageName === 'Concurrent Review' && isActive && (
-                      <div className="text-xs text-slate-400">
-                        {concurrentStatus.filter(r => r.status === 'approved').length}/{concurrentStatus.length} approved
-                      </div>
-                    )}
+                    {stageName === 'Concurrent Review' && isActive && (() => {
+                      const secOk  = concurrentStatus.some(r => r.role === 'security'        && r.status === 'approved');
+                      const tgaOk  = concurrentStatus.some(r => r.role === 'tech_governance' && r.status === 'approved');
+                      const grcRows = concurrentStatus.filter(r => r.role === 'grc_chair');
+                      const grcOk  = grcRows.length > 0 && grcRows.every(r => r.status === 'approved');
+                      const teamsApproved = [secOk, tgaOk, grcOk].filter(Boolean).length;
+                      return (
+                        <div className="text-xs text-slate-400">{teamsApproved}/3 approved</div>
+                      );
+                    })()}
                   </div>
                 </div>
                 {i < ORDERED_STAGES.length - 1 && (
@@ -309,7 +315,7 @@ export default function Workflow() {
         {/* Risk summary */}
         <Card>
           <h2 className="text-base font-semibold text-slate-800 mb-4">Risk Summary</h2>
-          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Statement</div>
+          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Description</div>
           <p className="text-sm text-slate-700 leading-relaxed mb-5">{risk.risk_statement || risk.title}</p>
 
           {/* Inherent + residual scores */}
@@ -496,7 +502,15 @@ export default function Workflow() {
             </div>
           )}
 
-          {!canAct && !isConcurrentReviewer && !(isRaiser && routedBackRows.length > 0) && (
+          {canSubmit && (
+            <div className="mt-3 flex justify-end">
+              <Button size="sm" onClick={() => act('submit')} disabled={acting}>
+                <Check size={13} /> Submit to System Owner
+              </Button>
+            </div>
+          )}
+
+          {!canAct && !isConcurrentReviewer && !(isRaiser && routedBackRows.length > 0) && !canSubmit && (
             <p className="mt-3 text-xs text-slate-400 text-center">
               {isTerminal
                 ? `This risk is ${risk.stage.toLowerCase()}.`

@@ -32,7 +32,7 @@ export const WORKFLOW_STAGES = [
 export const BEST_PRACTICES = [
   { id: 'BP-024', area: 'Authentication',  topic: 'MFA on internet-facing transfer services',      used: 23, accepted: 21 },
   { id: 'BP-019', area: 'Network Exposure',topic: 'Compensating control for delayed MFA',          used: 11, accepted: 10 },
-  { id: 'BP-007', area: 'Risk Statements', topic: 'Cause–event–consequence structure',             used: 142, accepted: 138 },
+  { id: 'BP-007', area: 'Risk Descriptions', topic: 'Cause–event–consequence structure',            used: 142, accepted: 138 },
   { id: 'BP-031', area: 'Residual Scoring',topic: 'Mitigation effectiveness ratings',              used: 38, accepted: 29 },
   { id: 'BP-042', area: 'Internet Facing', topic: 'Likelihood floor for internet-exposed assets',  used: 26, accepted: 24 },
   { id: 'BP-013', area: 'Justification',   topic: 'Required elements when accepting Med+ residual',used: 51, accepted: 44 },

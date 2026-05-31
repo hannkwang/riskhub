@@ -46,7 +46,7 @@ const REVIEW_TOOL = {
       },
       rewritten_statement: {
         type: 'string',
-        description: 'A fully rewritten risk statement following BP-007 cause-event-consequence structure.',
+        description: 'A fully rewritten risk description following BP-007 cause-event-consequence structure.',
       },
       proposed_residual_impact: {
         type: 'number',
@@ -117,9 +117,9 @@ Inherent risk — Impact: ${impact}/5, Likelihood: ${likelihood}/5, Score: ${imp
 User claimed residual — Impact: ${residualImpact || '?'}/5, Likelihood: ${residualLikelihood || '?'}/5, Score: ${residualImpact && residualLikelihood ? residualImpact * residualLikelihood : '?'}
 </trusted_context>
 
-<user_submitted_statement>
+<user_submitted_description>
 ${sanitizeForTag(statement) || '[not provided]'}
-</user_submitted_statement>
+</user_submitted_description>
 
 <user_submitted_mitigations>
 ${mitList}

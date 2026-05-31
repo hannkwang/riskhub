@@ -7,7 +7,7 @@ import { Badge, Card, PageHeader } from '../components/ui';
 const AREA_STYLE = {
   'Authentication':    'bg-blue-50 text-blue-700 border-blue-200',
   'Network Exposure':  'bg-orange-50 text-orange-700 border-orange-200',
-  'Risk Statements':   'bg-purple-50 text-purple-700 border-purple-200',
+  'Risk Descriptions': 'bg-purple-50 text-purple-700 border-purple-200',
   'Residual Scoring':  'bg-amber-50 text-amber-700 border-amber-200',
   'Internet Facing':   'bg-red-50 text-red-700 border-red-200',
   'Justification':     'bg-emerald-50 text-emerald-700 border-emerald-200',

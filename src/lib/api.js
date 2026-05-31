@@ -42,7 +42,7 @@ export const api = {
   reviewRisk: (body) => req('POST', '/review', body),
 
   // Analytics
-  getAnalytics: () => req('GET', '/analytics'),
+  getAnalytics: (params = {}) => req('GET', `/analytics?${new URLSearchParams(params)}`),
 
   // Best Practices
   getBestPractices: (params = {}) => req('GET', `/bestpractices?${new URLSearchParams(params)}`),
@@ -55,4 +55,15 @@ export const api = {
   // Systems
   getSystems:   ()         => req('GET', '/systems'),
   updateSystem: (id, body) => req('PATCH', `/systems/${id}`, body),
+
+  // SLA settings
+  getSla:    ()              => req('GET', '/sla'),
+  updateSla: (stage, days)   => req('PATCH', `/sla/${encodeURIComponent(stage)}`, { days }),
+
+  // Notifications
+  getNotifications: (since) => req('GET', `/notifications${since ? `?since=${encodeURIComponent(since)}` : ''}`),
+
+  // Portal settings
+  getPortalSettings:    ()              => req('GET', '/portal-settings'),
+  updatePortalSetting:  (key, value)    => req('PATCH', `/portal-settings/${encodeURIComponent(key)}`, { value }),
 };

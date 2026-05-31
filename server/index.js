@@ -12,6 +12,9 @@ const analyticsRouter   = require('./routes/analytics');
 const bpRouter          = require('./routes/bestpractices');
 const usersRouter       = require('./routes/users');
 const systemsRouter     = require('./routes/systems');
+const slaRouter           = require('./routes/sla');
+const notificationsRouter    = require('./routes/notifications');
+const portalSettingsRouter   = require('./routes/portal-settings');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +47,9 @@ app.use('/api/analytics',      analyticsRouter);
 app.use('/api/bestpractices',  bpRouter);
 app.use('/api/users',          usersRouter);
 app.use('/api/systems',        systemsRouter);
+app.use('/api/sla',            slaRouter);
+app.use('/api/notifications',   notificationsRouter);
+app.use('/api/portal-settings', portalSettingsRouter);
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 

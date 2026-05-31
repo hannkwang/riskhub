@@ -24,10 +24,10 @@ const ROLE_LABELS_MAP = {
 
 const PERMISSIONS = {
   'engineer':       { submit: true,  comment: true,  review: false, approve: false, admin: false },
-  'biz_owner':      { submit: false, comment: true,  review: true,  approve: true,  admin: false },
-  'security':       { submit: false, comment: true,  review: true,  approve: true,  admin: false },
-  'tech_governance':{ submit: false, comment: true,  review: true,  approve: true,  admin: true  },
-  'grc_chair':      { submit: false, comment: true,  review: true,  approve: true,  admin: true  },
+  'biz_owner':      { submit: true,  comment: true,  review: true,  approve: true,  admin: false },
+  'security':       { submit: true,  comment: true,  review: true,  approve: true,  admin: false },
+  'tech_governance':{ submit: true,  comment: true,  review: true,  approve: true,  admin: true  },
+  'grc_chair':      { submit: true,  comment: true,  review: true,  approve: true,  admin: true  },
 };
 
 function RoleBadge({ role }) {

@@ -1,8 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { PageHeader, Card, Badge, RiskBadge } from '../components/ui';
-import { ChevronRight, Clock, Check, RotateCcw } from 'lucide-react';
+import { parseUtc, timeAgo } from '../lib/time';
+import { PageHeader, Card, Badge, RiskBadge, Button } from '../components/ui';
+import { ChevronRight, Clock, Check, RotateCcw, CalendarClock } from 'lucide-react';
+
+function sixMonthsAgo() {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
+  return d.toISOString().split('T')[0];
+}
 
 const STAGES = ['Draft', 'System Owner', 'Concurrent Review'];
 
@@ -12,13 +19,6 @@ const STAGE_META = {
   'Concurrent Review': { color: 'bg-amber-50 border-amber-200',    label: 'bg-amber-100 text-amber-700',   desc: 'Under parallel review by all teams' },
 };
 
-function daysAgoLabel(isoStr) {
-  if (!isoStr) return '';
-  const days = Math.floor((Date.now() - new Date(isoStr).getTime()) / 86400000);
-  if (days === 0) return 'today';
-  if (days === 1) return '1d ago';
-  return `${days}d ago`;
-}
 
 function ApprovalMini({ approvals }) {
   if (!approvals?.length) return null;
@@ -50,6 +50,21 @@ export default function WorkflowOverview() {
   const [risksByStage, setRisksByStage] = useState({});
   const [concurrentStatus, setConcurrentStatus] = useState({});
   const [loading, setLoading] = useState(true);
+  const [dateMode, setDateMode] = useState('6m');
+  const [customDate, setCustomDate] = useState(sixMonthsAgo());
+
+  const fromDate = dateMode === '6m' ? sixMonthsAgo() : customDate;
+
+  const filteredByStage = useMemo(() => {
+    const cutoff = fromDate ? parseUtc(fromDate + 'T00:00:00') : null;
+    const result = {};
+    STAGES.forEach(s => {
+      result[s] = (risksByStage[s] || []).filter(r =>
+        !cutoff || (parseUtc(r.created_at) >= cutoff)
+      );
+    });
+    return result;
+  }, [risksByStage, fromDate]);
 
   useEffect(() => {
     api.getRisks({ stage: STAGES.join(',') })
@@ -74,7 +89,7 @@ export default function WorkflowOverview() {
       .finally(() => setLoading(false));
   }, []);
 
-  const totalOpen = Object.values(risksByStage).reduce((s, arr) => s + arr.length, 0);
+  const totalOpen = Object.values(filteredByStage).reduce((s, arr) => s + arr.length, 0);
 
   return (
     <>
@@ -82,11 +97,27 @@ export default function WorkflowOverview() {
         title="Workflow Overview"
         subtitle={loading ? 'Loading…' : `${totalOpen} risk acceptance${totalOpen !== 1 ? 's' : ''} in progress`}
         actions={
-          <Link to="/new">
-            <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors">
-              + New Risk
-            </button>
-          </Link>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+              <button onClick={() => setDateMode('6m')}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${dateMode === '6m' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                <CalendarClock size={12} /> Past 6 months
+              </button>
+              <button onClick={() => setDateMode('custom')}
+                className={`text-xs px-2.5 py-1.5 rounded-md font-medium transition-colors ${dateMode === 'custom' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                Custom
+              </button>
+            </div>
+            {dateMode === 'custom' && (
+              <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)}
+                className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            )}
+            <Link to="/new">
+              <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors">
+                + New Risk
+              </button>
+            </Link>
+          </div>
         }
       />
 
@@ -100,7 +131,7 @@ export default function WorkflowOverview() {
       ) : (
         <div className="grid lg:grid-cols-3 gap-5">
           {STAGES.map(stage => {
-            const risks = risksByStage[stage] || [];
+            const risks = filteredByStage[stage] || [];
             const meta = STAGE_META[stage];
             return (
               <div key={stage}>
@@ -138,7 +169,7 @@ export default function WorkflowOverview() {
                           <span>{r.owner}</span>
                           <span className="flex items-center gap-1">
                             <Clock size={10} />
-                            {daysAgoLabel(r.updated_at)}
+                            {timeAgo(r.updated_at)}
                           </span>
                         </div>
                         {stage === 'Concurrent Review' && approvals && (

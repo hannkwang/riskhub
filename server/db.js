@@ -70,6 +70,17 @@ db.exec(`
     FOREIGN KEY (risk_id) REFERENCES risks(id)
   );
 
+  CREATE TABLE IF NOT EXISTS sla_settings (
+    stage TEXT PRIMARY KEY,
+    days  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS portal_settings (
+    key         TEXT PRIMARY KEY,
+    value       INTEGER NOT NULL,
+    description TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS concurrent_approvals (
     risk_id TEXT NOT NULL,
     actor_id TEXT NOT NULL,
@@ -122,7 +133,24 @@ if (db.prepare('SELECT COUNT(*) as n FROM users').get().n > 0) {
   db.prepare("UPDATE users SET team = 'Tech Governance Assurance' WHERE role = 'tech_governance' AND team != 'Tech Governance Assurance'").run();
 }
 
-// 4. Back-fill concurrent_approvals for any risk already in Concurrent Review
+// 4. Seed sla_settings if empty
+if (db.prepare('SELECT COUNT(*) as n FROM sla_settings').get().n === 0) {
+  const ins = db.prepare('INSERT OR IGNORE INTO sla_settings (stage, days) VALUES (?,?)');
+  ins.run('Draft', 14);
+  ins.run('System Owner', 3);
+  ins.run('Concurrent Review', 7);
+}
+
+// 5. Rename 'Risk Statements' → 'Risk Descriptions' in best_practices
+db.prepare("UPDATE best_practices SET area = 'Risk Descriptions' WHERE area = 'Risk Statements'").run();
+
+// 6. Seed portal_settings if empty
+if (db.prepare('SELECT COUNT(*) as n FROM portal_settings').get().n === 0) {
+  db.prepare('INSERT OR IGNORE INTO portal_settings (key, value, description) VALUES (?,?,?)')
+    .run('review_period_months', 12, 'Default risk acceptance review period in months (expiry = end of same calendar month, N months after approval)');
+}
+
+// 5. Back-fill concurrent_approvals for any risk already in Concurrent Review
 {
   const openRisks = db.prepare("SELECT id FROM risks WHERE stage = 'Concurrent Review'").all();
   const reviewers  = db.prepare("SELECT id, role FROM users WHERE role IN ('security','tech_governance','grc_chair') AND active = 1").all();
@@ -182,7 +210,7 @@ function seedIfEmpty() {
     'INSERT OR IGNORE INTO best_practices (id, area, topic, content, used_count, accepted_count) VALUES (?,?,?,?,?,?)'
   );
   [
-    ['BP-007', 'Risk Statements', 'Cause–event–consequence structure',
+    ['BP-007', 'Risk Descriptions', 'Cause–event–consequence structure',
      `Risk statements must follow this pattern: "Because [technical root cause / vulnerability], [threat actor or scenario] could [specific action/event], resulting in [business or regulatory consequence]."\n\nDo: Name the exact vulnerability, the exploitation method, and the downstream impact.\nDo not: Use vague language like "could be hacked", "data could leak", "system might fail".\nExample: "Because the SFTP gateway does not enforce MFA on shared service accounts, an attacker with stolen credentials could authenticate as a privileged account and exfiltrate regulated vendor payment data, resulting in a PCI-DSS breach and financial penalties exceeding $500k."`,
      142, 138],
     ['BP-042', 'Internet Facing', 'Likelihood floor for internet-exposed assets',
