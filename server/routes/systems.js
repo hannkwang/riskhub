@@ -1,7 +1,13 @@
 const express = require('express');
 const db = require('../db');
+const { requireActor } = require('../lib/auth');
 
 const router = express.Router();
+
+// System metadata is security-relevant: `owner` decides who may approve risks in
+// the System Owner stage, and `internet_facing` drives the BP-042 likelihood floor
+// in AI review. Only admins may mutate it.
+const ADMIN_ROLES = new Set(['tech_governance', 'grc_chair', 'admin']);
 
 const CRITICALITY = new Set(['Critical', 'High', 'Medium', 'Low']);
 const SENSITIVITY = new Set(['Restricted', 'Confidential', 'Internal', 'Public']);
@@ -29,6 +35,13 @@ router.get('/', (req, res) => {
 
 // PATCH /api/systems/:id
 router.patch('/:id', (req, res) => {
+  const actor = requireActor(req, res);
+  if (!actor) return;
+
+  if (!ADMIN_ROLES.has(actor.role)) {
+    return res.status(403).json({ error: 'Only Tech Governance Assurance or GRC Co-Chair can modify systems' });
+  }
+
   const allowed = ['criticality', 'sensitivity', 'internet_facing', 'owner', 'team', 'rml'];
   const updates = {};
   for (const k of allowed) {

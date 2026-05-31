@@ -192,6 +192,7 @@ router.post('/', (req, res) => {
 
 // PATCH /api/risks/:id
 const TERMINAL_STAGES = new Set(['Approved', 'Rejected']);
+const RISK_ADMIN_ROLES = new Set(['tech_governance', 'grc_chair', 'admin']);
 
 router.patch('/:id', (req, res) => {
   const actor = requireActor(req, res);
@@ -199,6 +200,13 @@ router.patch('/:id', (req, res) => {
 
   const row = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Risk not found' });
+
+  // Draft privacy applies to writes as well as reads: a Draft is only visible to
+  // its creator, so only the creator (or an admin) may edit it. Return 404 — not
+  // 403 — to non-creators so the endpoint does not leak the existence of the draft.
+  if (row.stage === 'Draft' && actor.id !== row.created_by && !RISK_ADMIN_ROLES.has(actor.role)) {
+    return res.status(404).json({ error: 'Risk not found' });
+  }
 
   // Approved/Rejected risks are immutable — any change requires re-opening
   // the workflow via a transition, so the audit log captures the event.
@@ -263,8 +271,6 @@ router.patch('/:id', (req, res) => {
 });
 
 // DELETE /api/risks/:id — restricted to tech_governance and grc_chair
-const RISK_ADMIN_ROLES = new Set(['tech_governance', 'grc_chair', 'admin']);
-
 router.delete('/:id', (req, res) => {
   const actor = requireActor(req, res);
   if (!actor) return;

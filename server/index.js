@@ -39,6 +39,20 @@ if (Number.isFinite(trustProxyHops) && trustProxyHops > 0) {
 app.use(cors({ origin: isProd ? false : 'http://localhost:5173' }));
 app.use(express.json({ limit: '256kb' }));
 
+// Baseline security headers (dependency-free; a full CSP is left out so it does
+// not break the Vite/Tailwind SPA, which uses inline styles).
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');      // block MIME sniffing
+  res.setHeader('X-Frame-Options', 'DENY');                // anti-clickjacking
+  res.setHeader('Referrer-Policy', 'no-referrer');         // don't leak URLs
+  res.setHeader('X-XSS-Protection', '0');                  // modern guidance: rely on CSP, disable legacy auditor
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  if (isProd) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 app.use('/api/risks',          risksRouter);
 app.use('/api/workflow',       workflowRouter);
 app.use('/api/review',         reviewRouter);
