@@ -94,15 +94,20 @@ router.get('/', (req, res) => {
   res.json(filtered);
 });
 
+// A Draft is private to its creator for BOTH reads and writes. Admins get no
+// bypass: the list query and GET /:id hide other users' Drafts, so an admin could
+// never load one to act on it anyway. Keeping one predicate avoids the read/write
+// rules drifting apart. Returns true when the Draft must be hidden from `actor`.
+function isHiddenDraft(actor, row) {
+  return row.stage === 'Draft' && (!actor || actor.id !== row.created_by);
+}
+
 // GET /api/risks/:id
 router.get('/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Risk not found' });
-  if (row.stage === 'Draft') {
-    const actor = getActor(req);
-    if (!actor || actor.id !== row.created_by) {
-      return res.status(404).json({ error: 'Risk not found' });
-    }
+  if (isHiddenDraft(getActor(req), row)) {
+    return res.status(404).json({ error: 'Risk not found' });
   }
   res.json(formatRisk(row));
 });
@@ -201,10 +206,10 @@ router.patch('/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Risk not found' });
 
-  // Draft privacy applies to writes as well as reads: a Draft is only visible to
-  // its creator, so only the creator (or an admin) may edit it. Return 404 — not
-  // 403 — to non-creators so the endpoint does not leak the existence of the draft.
-  if (row.stage === 'Draft' && actor.id !== row.created_by && !RISK_ADMIN_ROLES.has(actor.role)) {
+  // Draft privacy applies to writes exactly as it does to reads (see isHiddenDraft):
+  // only the creator may edit a Draft. Return 404 — not 403 — so the endpoint does
+  // not leak the existence of another user's draft.
+  if (isHiddenDraft(actor, row)) {
     return res.status(404).json({ error: 'Risk not found' });
   }
 

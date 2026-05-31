@@ -30,6 +30,50 @@ export function RiskBadge({ level }) {
   return <Badge variant={map[level] ?? 'default'}>{level}</Badge>;
 }
 
+// Single source of truth for score → level thresholds (mirrors the server-side
+// computeLevel in routes/risks.js): Very Low <4, Low 4–8, Medium 9–14, High ≥15.
+export function riskLevel(score) {
+  if (score >= 15) return 'High';
+  if (score >= 9)  return 'Medium';
+  if (score >= 4)  return 'Low';
+  return 'Very Low';
+}
+
+// Shared 5×5 risk matrix. `className` styles the wrapper ('' = block, like the
+// New Risk form; 'inline-block' to shrink-wrap, as on the samples page).
+export function RiskMatrix({ impact, likelihood, className = '' }) {
+  const cellColor = (i, l) => {
+    const v = i * l;
+    if (v >= 15) return '#fca5a5';
+    if (v >= 9)  return '#fcd34d';
+    if (v >= 4)  return '#fef9c3';
+    return '#bbf7d0';
+  };
+  return (
+    <div className={className}>
+      <div className="grid gap-px bg-slate-200 rounded overflow-hidden" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        {[5,4,3,2,1].map((i) =>
+          [1,2,3,4,5].map((l) => {
+            const sel = i === impact && l === likelihood;
+            return (
+              <div key={`${i}-${l}`} className="w-7 h-6 flex items-center justify-center text-xs font-bold transition-transform"
+                style={{ background: sel ? '#1d4ed8' : cellColor(i, l), color: sel ? 'white' : '#374151',
+                  transform: sel ? 'scale(1.15)' : 'scale(1)', zIndex: sel ? 1 : 0,
+                  position: 'relative', borderRadius: sel ? '3px' : undefined }}>
+                {sel ? i * l : ''}
+              </div>
+            );
+          })
+        )}
+      </div>
+      <div className="flex justify-between text-xs text-slate-400 mt-1">
+        <span>← Likelihood →</span>
+        <span className="font-mono">{impact} × {likelihood} = {impact * likelihood}</span>
+      </div>
+    </div>
+  );
+}
+
 export function StageBadge({ stage }) {
   const map = {
     'Draft':             'draft',
