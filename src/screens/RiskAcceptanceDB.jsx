@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, ChevronRight, X, Save, ExternalLink, CalendarClock } from 'lucide-react';
+import { Search, ChevronRight, X, Save, ExternalLink, CalendarClock, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useUser } from '../contexts/UserContext';
 import { timeAgo, formatDate } from '../lib/time';
@@ -8,6 +8,23 @@ import { Badge, RiskBadge, StageBadge, Avatar, Button, Card, PageHeader, Select 
 
 const STAGES = ['Draft', 'System Owner', 'Concurrent Review', 'Approved', 'Rejected'];
 const LEVELS = ['High', 'Medium', 'Low', 'Very Low'];
+const STAGE_ORDER = Object.fromEntries(STAGES.map((s, i) => [s, i]));
+
+function SortHeader({ label, col, sortCol, sortAsc, onSort, align = 'left', className = '' }) {
+  const active = sortCol === col;
+  const Icon = active ? (sortAsc ? ChevronUp : ChevronDown) : ArrowUpDown;
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className={`px-4 py-3 cursor-pointer select-none hover:bg-slate-100 transition-colors ${className}`}
+    >
+      <span className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider ${active ? 'text-blue-700' : 'text-slate-500'} ${align === 'center' ? 'justify-center w-full' : ''}`}>
+        {label}
+        <Icon size={11} className={active ? 'text-blue-500' : 'text-slate-300'} />
+      </span>
+    </th>
+  );
+}
 
 function EditPanel({ risk, onClose, onSaved, systems }) {
   const [title, setTitle]           = useState(risk.title || '');
@@ -132,7 +149,14 @@ export default function RiskAcceptanceDB() {
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
   const [expiredOnly, setExpiredOnly] = useState(false);
+  const [sortCol, setSortCol]         = useState('updated_at');
+  const [sortAsc, setSortAsc]         = useState(false);
   const [editing, setEditing]         = useState(null);
+
+  function toggleSort(col) {
+    if (sortCol === col) setSortAsc(a => !a);
+    else { setSortCol(col); setSortAsc(true); }
+  }
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -162,6 +186,22 @@ export default function RiskAcceptanceDB() {
     if (toCutoff   && created > toCutoff)   return false;
     if (expiredOnly && !(r.expiresAt && r.expiresAt < today)) return false;
     return true;
+  }).sort((a, b) => {
+    let av, bv;
+    switch (sortCol) {
+      case 'id':            av = a.id;             bv = b.id;             break;
+      case 'title':         av = (a.title || '').toLowerCase(); bv = (b.title || '').toLowerCase(); break;
+      case 'owner':         av = (a.owner || '').toLowerCase(); bv = (b.owner || '').toLowerCase(); break;
+      case 'score':         av = a.score ?? -1;    bv = b.score ?? -1;    break;
+      case 'residual_score':av = a.residual_score ?? -1; bv = b.residual_score ?? -1; break;
+      case 'stage':         av = STAGE_ORDER[a.stage] ?? 99; bv = STAGE_ORDER[b.stage] ?? 99; break;
+      case 'updated_at':    av = a.updated_at || ''; bv = b.updated_at || ''; break;
+      case 'expiresAt':     av = a.expiresAt || ''; bv = b.expiresAt || ''; break;
+      default:              return 0;
+    }
+    if (av < bv) return sortAsc ? -1 : 1;
+    if (av > bv) return sortAsc ? 1 : -1;
+    return 0;
   });
 
   function handleSaved(updated) {
@@ -244,16 +284,16 @@ export default function RiskAcceptanceDB() {
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="text-left px-4 py-3 w-32">ID</th>
-                  <th className="text-left px-4 py-3">Title</th>
-                  <th className="text-left px-4 py-3 w-36 hidden md:table-cell">Owner</th>
-                  <th className="text-center px-3 py-3 w-24">Inherent</th>
-                  <th className="text-center px-3 py-3 w-24 hidden md:table-cell">Residual</th>
-                  <th className="text-left px-4 py-3 w-36 hidden sm:table-cell">Stage</th>
-                  <th className="text-left px-4 py-3 w-28 hidden lg:table-cell">Updated</th>
-                  <th className="text-left px-4 py-3 w-28 hidden xl:table-cell">Expires</th>
-                  <th className="w-20 px-4 py-3 text-right">Action</th>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <SortHeader label="ID"       col="id"            sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-32" />
+                  <SortHeader label="Title"    col="title"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} />
+                  <SortHeader label="Owner"    col="owner"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-36 hidden md:table-cell" />
+                  <SortHeader label="Inherent" col="score"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-24" />
+                  <SortHeader label="Residual" col="residual_score" sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-24 hidden md:table-cell" />
+                  <SortHeader label="Stage"    col="stage"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-36 hidden sm:table-cell" />
+                  <SortHeader label="Updated"  col="updated_at"    sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-28 hidden lg:table-cell" />
+                  <SortHeader label="Expires"  col="expiresAt"     sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-28 hidden xl:table-cell" />
+                  <th className="w-20 px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
