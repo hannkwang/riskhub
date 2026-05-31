@@ -38,12 +38,30 @@ Vite proxies all `/api/*` requests to `http://localhost:3001`, so the frontend a
 **Other commands:**
 ```bash
 npm run build                 # Production build to dist/
+npm run build:prod            # Build dist/ AND install server deps (used by deploy)
+npm start                     # node server/index.js — serves API + built dist/ from one port
 npm run lint                  # ESLint (frontend only)
 ./pentest.sh                  # API security test suite (requires backend running)
 ./pentest.sh --with-ai        # Same, plus 2 live Claude API calls
 ```
 
-There are no tests.
+There is no unit-test suite. `pentest.sh` is the de-facto regression check — a bash
+suite that hits a running backend and asserts on HTTP status codes (auth, privilege
+escalation, stage-lock, SQL injection, input validation, rate limits, audit-log
+integrity). Run it against any backend port with `API_BASE=http://localhost:PORT
+./pentest.sh`. After changing any auth/role/validation logic, re-run it and keep it
+green; update its assertions in lockstep when you intentionally change a contract.
+
+**Deployment:** Hosted on Railway, built from the root `Dockerfile` (Nixpacks is
+bypassed). The Dockerfile installs **both** dependency trees (root + `server/`),
+runs `npm run build`, and starts `node server/index.js`, which serves the API and
+the static `dist/` from a single port. `better-sqlite3` needs `python3/make/g++`
+(the alpine image installs them). `ANTHROPIC_API_KEY` is set in Railway's Variables
+(never committed). There is no persistent volume, so the SQLite DB resets to seed
+data on every redeploy — acceptable because the data is all synthetic.
+
+GitHub Actions run CodeQL and Fortify SAST scans (`.github/workflows/`) on push;
+`SECURITY.md` documents the reporting policy.
 
 ---
 
@@ -91,13 +109,13 @@ Screens import `useUser()` from `UserContext` to get `currentUser` (with `.role`
 
 Always use `src/lib/time.js` for timestamp display — never `new Date(sqliteStr)` directly (SQLite strings have no timezone marker and parse as local time). `parseUtc()` appends `Z` before parsing. All display is in `Asia/Singapore` (SGT, UTC+8).
 
-The `ui.jsx` primitives own all badge colours and button variants — add new variants there rather than inline Tailwind. When adding a new role, update `ROLE_LABELS` in `UserContext.jsx` and `ROLE_COLORS` in `Layout.jsx`.
+The `ui.jsx` primitives own all badge colours and button variants — add new variants there rather than inline Tailwind. It also exports the shared `RiskMatrix` component and `riskLevel(score)` helper (the score→level thresholds: Very Low <4, Low 4–8, Medium 9–14, High ≥15). Import these rather than re-implementing the 5×5 matrix or the threshold ladder in a screen — `NewRisk.jsx` and `SampleRisks.jsx` both consume them, and the same thresholds are mirrored server-side in `routes/risks.js` `computeLevel`. When adding a new role, update `ROLE_LABELS` in `UserContext.jsx` and `ROLE_COLORS` in `Layout.jsx`.
 
 ### Backend structure
 
 ```
 server/
-  index.js               # Express app; mounts all routers; reads ANTHROPIC_API_KEY from ../.env
+  index.js               # Express app; mounts all routers; security headers; serves dist/ in prod; reads ANTHROPIC_API_KEY from ../.env
   db.js                  # SQLite schema + idempotent migrations + seed data (runs on import)
   lib/
     auth.js              # getActor(req) / requireActor(req, res) — reads X-Riskhub-User header
@@ -110,9 +128,15 @@ server/
     notifications.js     # GET /api/notifications — role-filtered recent workflow events
     sla.js               # GET/PATCH /api/sla — stage SLA days (PATCH: tech_governance only)
     portal-settings.js   # GET/PATCH /api/portal-settings — global settings (PATCH: tech_governance only)
-    users.js
-    systems.js
+    users.js             # PATCH /api/users/:id — role/name/active are admin-only; team is self-service
+    systems.js           # GET public; PATCH /api/systems/:id — admin-only (tech_governance/grc_chair/admin)
 ```
+
+`index.js` applies baseline security headers to every response via a small
+dependency-free middleware (`X-Content-Type-Options`, `X-Frame-Options: DENY`,
+`Referrer-Policy`, `Permissions-Policy`, and HSTS in prod). No CSP is set — it would
+break the Tailwind SPA's inline styles. CORS is locked to the Vite dev origin in dev
+and disabled in prod (same-origin).
 
 The backend uses **CommonJS** (`require`/`module.exports`). The frontend uses **ESM** (`import`/`export`). Do not mix them.
 
@@ -185,7 +209,7 @@ Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/tran
 - `grc_chair`: returns risks where this specific actor has a `pending` CA row (all co-chairs must approve individually).
 - `engineer` (and any other role): returns only Drafts where `created_by = actor.id`.
 
-**Draft privacy**: `GET /api/risks` and `GET /api/risks/:id` filter Draft-stage risks to the creator only. Non-creators receive 404 on direct access.
+**Draft privacy**: a Draft is private to its creator for **both reads and writes** — admins get no bypass. `routes/risks.js` centralises this in one predicate, `isHiddenDraft(actor, row)`, used by `GET /api/risks/:id` and `PATCH /api/risks/:id` (and the `GET /api/risks` list applies the same rule in SQL). Non-creators receive **404** (not 403) on direct read or edit, so the endpoint never leaks a draft's existence. If you change who may see a draft, change `isHiddenDraft` and the list query together.
 
 ### Notifications (`notifications.js`)
 
