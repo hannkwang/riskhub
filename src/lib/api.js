@@ -44,9 +44,6 @@ export const api = {
   // Analytics
   getAnalytics: (params = {}) => req('GET', `/analytics?${new URLSearchParams(params)}`),
 
-  // Best Practices
-  getBestPractices: (params = {}) => req('GET', `/bestpractices?${new URLSearchParams(params)}`),
-  trackBPUsage: (id, accepted)    => req('PATCH', `/bestpractices/${id}/usage`, { accepted }),
 
   // Users
   getUsers:   ()        => req('GET', '/users'),

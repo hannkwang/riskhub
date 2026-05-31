@@ -9,9 +9,9 @@ import Approvals from './screens/Approvals';
 import Analytics from './screens/Analytics';
 import Users from './screens/Users';
 import SystemsDB from './screens/SystemsDB';
-import BestPractices from './screens/BestPractices';
 import SLA from './screens/SLA';
 import RiskAcceptanceDB from './screens/RiskAcceptanceDB';
+import SampleRisks from './screens/SampleRisks';
 
 export default function App() {
   return (
@@ -27,8 +27,8 @@ export default function App() {
             <Route path="/analytics"         element={<Analytics />} />
             <Route path="/admin/users"       element={<Users />} />
             <Route path="/admin/systems"     element={<SystemsDB />} />
-            <Route path="/admin/practices"   element={<BestPractices />} />
             <Route path="/admin/sla"         element={<SLA />} />
+            <Route path="/admin/samples"     element={<SampleRisks />} />
             <Route path="/admin/risk-db"     element={<RiskAcceptanceDB />} />
           </Route>
         </Routes>

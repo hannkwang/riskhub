@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard, PlusCircle, CheckSquare, BarChart2,
-  Users, Database, BookOpen, Shield, Bell, Search, Menu, X, ChevronDown,
-  Check, RotateCcw, AlertTriangle, Clock,
+  Users, Database, Shield, Bell, Search, Menu, X, ChevronDown,
+  Check, RotateCcw, AlertTriangle, Clock, FileText,
 } from 'lucide-react';
 import { useUser, ROLE_LABELS } from '../contexts/UserContext';
 import { api } from '../lib/api';
@@ -19,9 +19,9 @@ const NAV = [
 const ADMIN_NAV = [
   { to: '/admin/risk-db',  label: 'Risks DB',       icon: Shield },
   { to: '/admin/systems',  label: 'Systems DB',     icon: Database },
-  { to: '/admin/practices',label: 'Best Practices', icon: BookOpen },
   { to: '/admin/users',    label: 'Users & Roles',  icon: Users },
   { to: '/admin/sla',      label: 'SLA Settings',   icon: Bell },
+  { to: '/admin/samples',  label: 'Sample RAs',     icon: FileText },
 ];
 
 const ROLE_COLORS = {

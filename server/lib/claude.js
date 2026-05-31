@@ -1,5 +1,4 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const db = require('../db');
 
 let client;
 function getClient() {
@@ -98,11 +97,49 @@ function sanitizeForTag(value) {
   return String(value).replace(/[<>]/g, ' ');
 }
 
+const BEST_PRACTICES_TEXT = `### BP-007 [Risk Descriptions]: Cause–event–consequence structure
+Risk statements must follow this pattern: "Because [technical root cause / vulnerability], [threat actor or scenario] could [specific action/event], resulting in [business or regulatory consequence]."
+
+Do: Name the exact vulnerability, the exploitation method, and the downstream impact.
+Do not: Use vague language like "could be hacked", "data could leak", "system might fail".
+Example: "Because the SFTP gateway does not enforce MFA on shared service accounts, an attacker with stolen credentials could authenticate as a privileged account and exfiltrate regulated vendor payment data, resulting in a PCI-DSS breach and financial penalties exceeding $500k."
+
+### BP-013 [Justification]: Required elements when accepting Med+ residual risk
+When the proposed residual risk is Medium or higher, the justification section must explicitly address all five elements:
+1. Data classification — what data is at risk and its sensitivity tier
+2. Named accountable owner — who accepts this risk on behalf of the business
+3. Monitoring KPIs — at least two measurable indicators that would detect exploitation
+4. Reassessment cadence — specific date or trigger for re-evaluation
+5. Business rationale — why the cost of further reduction exceeds the benefit
+
+### BP-019 [Network Exposure]: Compensating control for delayed MFA rollout
+When MFA cannot be deployed immediately, compensating controls must be time-boxed and specific:
+1. IP allowlist: Document specific CIDR ranges, named vendor contacts, and monthly review cycle
+2. SOC alerting: >10 failures/min triggers P2 alert
+3. Session monitoring: log all sessions with source IP, duration, and data volume
+4. Hard deadline: compensating controls must have a firm cutover date within 90 days maximum
+
+### BP-024 [Authentication]: MFA on internet-facing transfer services
+All internet-facing file transfer services (SFTP, FTPS, MFT platforms) must enforce MFA for all authentication pathways including interactive user logins, service account connections, and API-based access.
+
+For automated/scripted connections: use certificate-pinned mTLS as MFA-equivalent.
+For transition periods: document all non-MFA accounts with a specific remediation date (<90 days).
+
+### BP-031 [Residual Scoring]: Mitigation effectiveness ratings
+Each mitigation must have an effectiveness rating that justifies the proposed residual score:
+- High: Only preventive controls that directly eliminate the root cause (reduces L by 2+ or I by 1+)
+- Medium: Controls that significantly reduce likelihood but don't eliminate the vulnerability
+- Low: Detective or recovery controls
+
+The aggregate of all mitigations should justify the inherent-to-residual delta.
+
+### BP-042 [Internet Facing]: Likelihood floor for internet-exposed assets
+Any system directly reachable from the public internet must have a minimum likelihood rating of L:3 (Possible) unless documented evidence of ALL of the following is attached to the assessment:
+1. WAF coverage with traffic inspection enabled
+2. Bot management solution with false-positive rate <1%
+3. TLS 1.2+ enforced with HSTS and strong cipher suites`;
+
 async function reviewRisk({ systemName, internetFacing, criticality, statement, impact, likelihood, residualImpact, residualLikelihood, mitigations, justification }) {
-  const bps = db.prepare('SELECT id, area, topic, content FROM best_practices').all();
-  const bpText = bps.map(bp =>
-    `### ${bp.id} [${bp.area}]: ${bp.topic}\n${bp.content}`
-  ).join('\n\n');
 
   const mitList = Array.isArray(mitigations) && mitigations.length
     ? mitigations.map(m =>
@@ -170,7 +207,7 @@ When verdict = "underestimated", additional_mitigations MUST:
 Only flag real issues — do not manufacture problems if the submission is already good.
 
 BEST PRACTICES REFERENCE:
-${bpText}`,
+${BEST_PRACTICES_TEXT}`,
         cache_control: { type: 'ephemeral' },
       },
     ],

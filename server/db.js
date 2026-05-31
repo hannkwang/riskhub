@@ -141,10 +141,7 @@ if (db.prepare('SELECT COUNT(*) as n FROM sla_settings').get().n === 0) {
   ins.run('Concurrent Review', 7);
 }
 
-// 5. Rename 'Risk Statements' → 'Risk Descriptions' in best_practices
-db.prepare("UPDATE best_practices SET area = 'Risk Descriptions' WHERE area = 'Risk Statements'").run();
-
-// 6. Seed portal_settings if empty
+// 5. Seed portal_settings if empty
 if (db.prepare('SELECT COUNT(*) as n FROM portal_settings').get().n === 0) {
   db.prepare('INSERT OR IGNORE INTO portal_settings (key, value, description) VALUES (?,?,?)')
     .run('review_period_months', 12, 'Default risk acceptance review period in months (expiry = end of same calendar month, N months after approval)');
@@ -204,31 +201,6 @@ function seedIfEmpty() {
     ['sys-8', 'K8s DEV Cluster',         'Medium',   'Internal',     0, 'Marcus Webb',  'Cloud Infra',   'Medium'],
     ['sys-9', 'Mobile Banking App',      'Critical', 'Restricted',   1, 'Sara Lin',     'Retail BU',     'High'],
   ].forEach(s => insertSystem.run(...s));
-
-  // Best practices
-  const insertBP = db.prepare(
-    'INSERT OR IGNORE INTO best_practices (id, area, topic, content, used_count, accepted_count) VALUES (?,?,?,?,?,?)'
-  );
-  [
-    ['BP-007', 'Risk Descriptions', 'Cause–event–consequence structure',
-     `Risk statements must follow this pattern: "Because [technical root cause / vulnerability], [threat actor or scenario] could [specific action/event], resulting in [business or regulatory consequence]."\n\nDo: Name the exact vulnerability, the exploitation method, and the downstream impact.\nDo not: Use vague language like "could be hacked", "data could leak", "system might fail".\nExample: "Because the SFTP gateway does not enforce MFA on shared service accounts, an attacker with stolen credentials could authenticate as a privileged account and exfiltrate regulated vendor payment data, resulting in a PCI-DSS breach and financial penalties exceeding $500k."`,
-     142, 138],
-    ['BP-042', 'Internet Facing', 'Likelihood floor for internet-exposed assets',
-     `Any system directly reachable from the public internet must have a minimum likelihood rating of L:3 (Possible) unless documented evidence of ALL of the following is attached to the assessment:\n1. WAF coverage with traffic inspection enabled\n2. Bot management solution with false-positive rate <1%\n3. TLS 1.2+ enforced with HSTS and strong cipher suites\n\nRationale: Internet-facing exposure dramatically increases attack surface. Without these controls, opportunistic scanning and automated exploitation make likelihood statistically higher than "Unlikely".`,
-     26, 24],
-    ['BP-013', 'Justification', 'Required elements when accepting Med+ residual risk',
-     `When the proposed residual risk is Medium or higher, the justification section must explicitly address all five elements:\n1. Data classification — what data is at risk and its sensitivity tier\n2. Named accountable owner — who accepts this risk on behalf of the business\n3. Monitoring KPIs — at least two measurable indicators that would detect exploitation\n4. Reassessment cadence — specific date or trigger for re-evaluation\n5. Business rationale — why the cost of further reduction exceeds the benefit`,
-     51, 44],
-    ['BP-024', 'Authentication', 'MFA on internet-facing transfer services',
-     `All internet-facing file transfer services (SFTP, FTPS, MFT platforms) must enforce MFA for all authentication pathways including interactive user logins, service account connections, and API-based access.\n\nFor automated/scripted connections: use certificate-pinned mTLS as MFA-equivalent.\nFor transition periods: document all non-MFA accounts with a specific remediation date (<90 days).`,
-     23, 21],
-    ['BP-019', 'Network Exposure', 'Compensating control for delayed MFA rollout',
-     `When MFA cannot be deployed immediately, compensating controls must be time-boxed and specific:\n1. IP allowlist: Document specific CIDR ranges, named vendor contacts, and monthly review cycle\n2. SOC alerting: >10 failures/min triggers P2 alert\n3. Session monitoring: log all sessions with source IP, duration, and data volume\n4. Hard deadline: compensating controls must have a firm cutover date within 90 days maximum`,
-     11, 10],
-    ['BP-031', 'Residual Scoring', 'Mitigation effectiveness ratings',
-     `Each mitigation must have an effectiveness rating that justifies the proposed residual score:\n- High: Only preventive controls that directly eliminate the root cause (reduces L by 2+ or I by 1+)\n- Medium: Controls that significantly reduce likelihood but don't eliminate the vulnerability\n- Low: Detective or recovery controls\n\nThe aggregate of all mitigations should justify the inherent-to-residual delta.`,
-     38, 29],
-  ].forEach(b => insertBP.run(...b));
 
   // Risks and history
   const insertRisk = db.prepare(`

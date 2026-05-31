@@ -72,18 +72,20 @@ src/
     Layout.jsx         # Sidebar + topbar shell; role-switcher; NotificationBell; ROLE_COLORS map
     ui.jsx             # Shared primitives: Badge, RiskBadge, StageBadge, Avatar, Button, Card, KpiCard, etc.
   screens/
-    Dashboard.jsx      # Risk table; 3 KPI cards (high open risks, SLA breaches, expiring soon)
-    NewRisk.jsx        # Risk creation form: title + description + AI review panel; Save Draft + Submit
-    Workflow.jsx       # Risk detail: stage transitions, concurrent review panel, x/3 progress path
-    WorkflowOverview.jsx # Kanban board at /workflow; timeline filter (6m / custom)
-    Approvals.jsx      # Queue of risks awaiting current user's action
-    Analytics.jsx      # Stage timing, pending approvals, route-backs; timeline filter (6m / custom)
-    Users.jsx          # Admin: user list + role/system assignment; PERMISSIONS map
-    SystemsDB.jsx      # Admin: system catalog; filter by RML and internet-facing
-    BestPractices.jsx  # Admin: GRC best practice library
-    SLA.jsx            # Admin: workflow SLA deadlines + default review period (TGA-only edit)
-    RiskAcceptanceDB.jsx # Admin: searchable/filterable full risk table; edit panel for TGA/GRC
+    Dashboard.jsx         # Risk table; 3 KPI cards (high open risks, SLA breaches, expiring soon)
+    NewRisk.jsx           # Risk creation form: title + description + AI review panel; Save Draft + Submit
+    Workflow.jsx          # Risk detail: stage transitions, concurrent review panel, x/3 progress path
+    WorkflowOverview.jsx  # Kanban board at /workflow; timeline filter (6m / custom)
+    Approvals.jsx         # Queue of risks awaiting current user's action
+    Analytics.jsx         # Stage timing, pending approvals, route-backs; timeline filter (6m / custom)
+    Users.jsx             # Admin: user list + role/system assignment; PERMISSIONS map
+    SystemsDB.jsx         # Admin: system catalog; filter by RML and internet-facing
+    SLA.jsx               # Admin: workflow SLA deadlines + default review period (TGA-only edit)
+    RiskAcceptanceDB.jsx  # Admin: searchable/filterable full risk table; edit panel for TGA/GRC
+    SampleRisks.jsx       # Admin: 5 static reference risk acceptances (no backend); read-only
 ```
+
+Admin nav order: Risks DB → Systems DB → Users & Roles → SLA Settings → Sample RAs.
 
 Screens import `useUser()` from `UserContext` to get `currentUser` (with `.role`). All REST calls go through `api.*` methods in `lib/api.js`. `lib/api.js` sets the `X-Riskhub-User` header to the user's `id` on every request — this is what `getActor(req)` reads on the server.
 
@@ -108,12 +110,13 @@ server/
     notifications.js     # GET /api/notifications — role-filtered recent workflow events
     sla.js               # GET/PATCH /api/sla — stage SLA days (PATCH: tech_governance only)
     portal-settings.js   # GET/PATCH /api/portal-settings — global settings (PATCH: tech_governance only)
-    bestpractices.js
     users.js
     systems.js
 ```
 
 The backend uses **CommonJS** (`require`/`module.exports`). The frontend uses **ESM** (`import`/`export`). Do not mix them.
+
+Note: `server/routes/bestpractices.js` exists on disk but is **not mounted** in `index.js` and not used anywhere. The `best_practices` table also exists in the DB schema but is unpopulated in fresh installs and unused at runtime.
 
 ### Data model
 
@@ -195,7 +198,7 @@ Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/tran
 
 ### AI review (claude.js)
 
-`reviewRisk()` uses `tool_choice: { type: 'any' }` to force a single `submit_risk_review` tool call. The system prompt (with all best practices from the DB) is marked `cache_control: ephemeral` for prompt caching. The tool schema returns:
+`reviewRisk()` uses `tool_choice: { type: 'any' }` to force a single `submit_risk_review` tool call. The system prompt is marked `cache_control: ephemeral` for prompt caching. Best practice rules (BP-007, BP-013, BP-019, BP-024, BP-031, BP-042) are hardcoded as `BEST_PRACTICES_TEXT` directly in `claude.js` — they are **not** loaded from the database. The tool schema returns:
 - `flags` — policy violations or quality issues
 - `suggestions` — before/after improvement text
 - `rewritten_statement` — BP-007-compliant rewrite of the risk description
@@ -225,3 +228,4 @@ Admin roles (`tech_governance`, `grc_chair`) can update any user's `name`, `role
 - **DB migrations**: New columns added with `ALTER TABLE … ADD COLUMN` guarded by `PRAGMA table_info`. All migrations in `db.js` are idempotent and run on every startup before `seedIfEmpty()`. The migration inserting new users is guarded by `userCount > 0` to avoid poisoning the fresh-DB seed guard.
 - **systems.owner is a name string, not a FK**: Compare `systems.owner = user.name`. Name changes must cascade — see `users.js` PATCH handler.
 - **Email derivation**: `name.toLowerCase().replace(/ /g, '.') + '@meetings.gov'` — computed in the frontend, not stored.
+- **SampleRisks.jsx is fully static**: No API calls, no backend dependency. All 5 sample risk acceptances are hardcoded in the component. The `RiskMatrix` component in that file is a local copy — it does not share code with `NewRisk.jsx`.
