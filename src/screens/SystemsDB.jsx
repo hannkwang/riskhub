@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, Globe, Lock, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Globe, Lock, AlertTriangle, ChevronUp, ChevronDown, X, Save, Pencil } from 'lucide-react';
 import { api } from '../lib/api';
 import { Badge, Card, PageHeader } from '../components/ui';
+import { useUser } from '../contexts/UserContext';
 
 const CRIT_ORDER = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 const CRIT_STYLE = {
@@ -73,13 +74,136 @@ function SortHeader({ label, field, sort, onSort }) {
   );
 }
 
+const SELECT_CLS = 'w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white';
+const INPUT_CLS  = 'w-full px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+function EditPanel({ system, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    criticality:    system.crit        || '',
+    sensitivity:    system.sens        || '',
+    rml:            system.rml         || '',
+    internet_facing: system.inet,
+    owner:          system.owner       || '',
+    team:           system.team        || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      const updated = await api.updateSystem(system.id, {
+        ...form,
+        internet_facing: form.internet_facing ? 1 : 0,
+      });
+      onSaved(updated);
+    } catch (e) {
+      setError(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-sm bg-white shadow-2xl border-l border-slate-200 flex flex-col h-full overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">{system.name}</div>
+            <div className="text-xs text-slate-400 mt-0.5">Edit system metadata</div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 mt-0.5"><X size={18} /></button>
+        </div>
+
+        {/* Fields */}
+        <div className="flex-1 px-5 py-4 space-y-4">
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Criticality</label>
+            <select className={SELECT_CLS} value={form.criticality} onChange={e => set('criticality', e.target.value)}>
+              {['Critical', 'High', 'Medium', 'Low'].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Sensitivity</label>
+            <select className={SELECT_CLS} value={form.sensitivity} onChange={e => set('sensitivity', e.target.value)}>
+              {['Restricted', 'Confidential', 'Internal', 'Public'].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Risk Management Level (RML)</label>
+            <select className={SELECT_CLS} value={form.rml} onChange={e => set('rml', e.target.value)}>
+              {['High', 'Medium', 'Low'].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Internet-facing</label>
+            <div className="flex gap-3">
+              {[true, false].map(v => (
+                <button
+                  key={String(v)}
+                  onClick={() => set('internet_facing', v)}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    form.internet_facing === v
+                      ? 'bg-blue-700 text-white border-blue-700'
+                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {v ? 'Yes' : 'No'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">System Owner</label>
+            <input className={INPUT_CLS} value={form.owner} maxLength={200}
+              onChange={e => set('owner', e.target.value)} placeholder="Owner name" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Team</label>
+            <input className={INPUT_CLS} value={form.team} maxLength={200}
+              onChange={e => set('team', e.target.value)} placeholder="Team name" />
+          </div>
+
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded p-2">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-slate-100">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-700 text-white text-sm font-medium rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors"
+          >
+            <Save size={14} />
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SystemsDB() {
+  const { currentUser } = useUser();
+  const canEdit = currentUser?.role === 'tech_governance';
+
   const [SYSTEMS, setSystems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [rmlFilter, setRmlFilter]   = useState('all');
   const [inetFilter, setInetFilter] = useState('all');
   const [sort, setSort] = useState({ field: 'crit', dir: 'asc' });
+  const [selected, setSelected] = useState(null);
 
   useEffect(() => {
     api.getSystems()
@@ -97,11 +221,20 @@ export default function SystemsDB() {
     setSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
   }
 
+  function handleSaved(updated) {
+    setSystems(prev => prev.map(s =>
+      s.id === updated.id
+        ? { ...s, ...updated, crit: updated.criticality, sens: updated.sensitivity, inet: updated.internet_facing }
+        : s
+    ));
+    setSelected(null);
+  }
+
   const rmls = ['all', 'High', 'Medium', 'Low'];
 
   const filtered = SYSTEMS
     .filter(s => {
-      const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.owner.toLowerCase().includes(search.toLowerCase()) || s.team.toLowerCase().includes(search.toLowerCase());
+      const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || (s.owner || '').toLowerCase().includes(search.toLowerCase()) || (s.team || '').toLowerCase().includes(search.toLowerCase());
       const matchRml  = rmlFilter === 'all' || s.rml === rmlFilter;
       const matchInet = inetFilter === 'all' || (inetFilter === 'yes' ? s.inet : !s.inet);
       return matchSearch && matchRml && matchInet;
@@ -206,16 +339,18 @@ export default function SystemsDB() {
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 hidden md:table-cell">Owner</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">Team</th>
                 <SortHeader label="Open RAs" field="openRAs" sort={sort} onSort={toggleSort} />
+                {canEdit && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-sm text-slate-400">No systems match your filters.</td>
+                  <td colSpan={canEdit ? 9 : 8} className="py-12 text-center text-sm text-slate-400">No systems match your filters.</td>
                 </tr>
               )}
               {filtered.map(s => (
-                <tr key={s.name} className="hover:bg-slate-50 transition-colors">
+                <tr key={s.name} className={`transition-colors ${canEdit ? 'hover:bg-slate-50 cursor-pointer' : 'hover:bg-slate-50'}`}
+                  onClick={canEdit ? () => setSelected(s) : undefined}>
                   <td className="px-4 py-3.5">
                     <span className="font-medium text-slate-900">{s.name}</span>
                   </td>
@@ -230,6 +365,13 @@ export default function SystemsDB() {
                   <td className="px-4 py-3.5 text-slate-600 hidden md:table-cell">{s.owner}</td>
                   <td className="px-4 py-3.5 text-slate-500 hidden lg:table-cell">{s.team}</td>
                   <td className="px-4 py-3.5"><OpenRAsCell count={s.openRAs} /></td>
+                  {canEdit && (
+                    <td className="px-4 py-3.5 text-right" onClick={e => { e.stopPropagation(); setSelected(s); }}>
+                      <button className="text-slate-400 hover:text-blue-600 transition-colors p-1 rounded hover:bg-blue-50">
+                        <Pencil size={13} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -244,6 +386,15 @@ export default function SystemsDB() {
           <strong>{internetCount} internet-facing systems</strong> are subject to the Likelihood floor policy (BP-042). All risk assessments for these systems must apply a minimum Likelihood score of 3.
         </div>
       </div>
+
+      {/* Edit panel */}
+      {selected && (
+        <EditPanel
+          system={selected}
+          onClose={() => setSelected(null)}
+          onSaved={handleSaved}
+        />
+      )}
     </>
   );
 }
