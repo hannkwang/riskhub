@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Search, UserPlus, MoreHorizontal,
-  Mail, ChevronDown, X, Check, AlertCircle,
+  Mail, ChevronDown, ChevronUp, X, Check, AlertCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Badge, Avatar, Button, Card, PageHeader } from '../components/ui';
@@ -292,6 +292,23 @@ function InviteModal({ onClose }) {
   );
 }
 
+function SortHeader({ label, field, sort, onSort, className = '' }) {
+  const active = sort.field === field;
+  return (
+    <th
+      className={`text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 cursor-pointer select-none hover:text-slate-700 ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active
+          ? sort.dir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+          : <ChevronDown size={12} className="opacity-0 group-hover:opacity-40" />}
+      </span>
+    </th>
+  );
+}
+
 function enrichUser(u) {
   return {
     ...u,
@@ -308,8 +325,14 @@ export default function Users() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sort, setSort] = useState({ field: 'name', dir: 'asc' });
   const [editing, setEditing] = useState(null);
   const [inviting, setInviting] = useState(false);
+
+  function toggleSort(field) {
+    setSort(s => s.field === field ? { field, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { field, dir: 'asc' });
+  }
 
   useEffect(() => {
     Promise.all([api.getUsers(), api.getSystems()])
@@ -341,16 +364,33 @@ export default function Users() {
 
   const roles = ['all', ...Object.keys(ROLE_COLORS)];
 
-  const filtered = users.filter(u => {
-    const ownedNames = (systemsByOwner[u.name] || []).map(s => s.name);
-    const matchSearch = !search
-      || u.name.toLowerCase().includes(search.toLowerCase())
-      || u.email.includes(search.toLowerCase())
-      || (u.team || '').toLowerCase().includes(search.toLowerCase())
-      || ownedNames.some(n => n.toLowerCase().includes(search.toLowerCase()));
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
-    return matchSearch && matchRole;
-  });
+  const ROLE_ORDER = Object.keys(ROLE_COLORS);
+
+  const filtered = useMemo(() => {
+    const list = users.filter(u => {
+      const ownedNames = (systemsByOwner[u.name] || []).map(s => s.name);
+      const matchSearch = !search
+        || u.name.toLowerCase().includes(search.toLowerCase())
+        || u.email.includes(search.toLowerCase())
+        || (u.team || '').toLowerCase().includes(search.toLowerCase())
+        || ownedNames.some(n => n.toLowerCase().includes(search.toLowerCase()));
+      const matchRole   = roleFilter   === 'all' || u.role   === roleFilter;
+      const matchStatus = statusFilter === 'all' || u.status === statusFilter;
+      return matchSearch && matchRole && matchStatus;
+    });
+
+    list.sort((a, b) => {
+      let av, bv;
+      if (sort.field === 'name')   { av = a.name.toLowerCase();            bv = b.name.toLowerCase(); }
+      if (sort.field === 'role')   { av = ROLE_ORDER.indexOf(a.role);      bv = ROLE_ORDER.indexOf(b.role); }
+      if (sort.field === 'team')   { av = (a.team || '').toLowerCase();    bv = (b.team || '').toLowerCase(); }
+      if (sort.field === 'status') { av = a.status;                        bv = b.status; }
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1;
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return list;
+  }, [users, search, roleFilter, statusFilter, sort, systemsByOwner]);
 
   return (
     <>
@@ -365,16 +405,26 @@ export default function Users() {
       />
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <div className="relative flex-1 min-w-48 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search users…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      <div className="flex flex-col gap-3 mb-5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-48 max-w-xs">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search name, email, team…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {[{ v: 'all', label: `All (${users.length})` }, { v: 'active', label: 'Active' }, { v: 'invited', label: 'Invited' }].map(({ v, label }) => (
+              <button key={v} onClick={() => setStatusFilter(v)}
+                className={`px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${statusFilter === v ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {roles.map(r => (
@@ -385,7 +435,7 @@ export default function Users() {
                 roleFilter === r ? 'bg-blue-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {r === 'all' ? `All (${users.length})` : r}
+              {r === 'all' ? `All roles` : ROLE_LABELS_MAP[r] || r}
             </button>
           ))}
         </div>
@@ -397,10 +447,10 @@ export default function Users() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">User</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3">Role</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 hidden md:table-cell">Team / Systems</th>
-                <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 hidden sm:table-cell">Status</th>
+                <SortHeader label="User"          field="name"   sort={sort} onSort={toggleSort} className="px-5" />
+                <SortHeader label="Role"          field="role"   sort={sort} onSort={toggleSort} />
+                <SortHeader label="Team / Systems" field="team"  sort={sort} onSort={toggleSort} className="hidden md:table-cell" />
+                <SortHeader label="Status"        field="status" sort={sort} onSort={toggleSort} className="hidden sm:table-cell" />
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">Last active</th>
                 <th className="px-4 py-3 w-10" />
               </tr>
