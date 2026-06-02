@@ -77,10 +77,20 @@ router.get('/', (req, res) => {
   if (owner) { sql += ' AND owner = ?'; params.push(owner); }
   if (created_by) { sql += ' AND created_by = ?'; params.push(created_by); }
 
-  // Draft risks are private — only visible to their creator
+  // Role-based visibility: engineers see only their own risks; system owners
+  // see only risks for systems they own (plus draft privacy for both).
+  // All other roles (security, TGA, GRC, admin) retain full visibility.
   if (actor) {
-    sql += " AND (stage != 'Draft' OR created_by = ?)";
-    params.push(actor.id);
+    if (actor.role === 'engineer') {
+      sql += ' AND created_by = ?';
+      params.push(actor.id);
+    } else if (actor.role === 'biz_owner') {
+      sql += " AND (stage != 'Draft' OR created_by = ?) AND system_name IN (SELECT name FROM systems WHERE owner = ?)";
+      params.push(actor.id, actor.name);
+    } else {
+      sql += " AND (stage != 'Draft' OR created_by = ?)";
+      params.push(actor.id);
+    }
   } else {
     sql += " AND stage != 'Draft'";
   }
