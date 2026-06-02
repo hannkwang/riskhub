@@ -87,7 +87,7 @@ src/
     time.js            # Shared time utilities: parseUtc, timeAgo, formatDate, formatDateTime (SGT)
     data.js            # Static fixture data from early prototyping — not used by any live screen
   contexts/
-    UserContext.jsx    # Current user + role; ROLE_LABELS map; localStorage fallback
+    UserContext.jsx    # Current user + role; ROLE_LABELS map; ANALYTICS_ROLES set; localStorage fallback
   components/
     Layout.jsx         # Sidebar + topbar shell; role-switcher; NotificationBell; ROLE_COLORS map
     ui.jsx             # Shared primitives: Badge, RiskBadge, StageBadge, Avatar, Button, Card, KpiCard, etc.
@@ -207,15 +207,14 @@ Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/tran
 
 **Queue endpoint** `GET /api/workflow/queue/:role` behaviour by role:
 - `biz_owner`: JOINs risks to `systems` on `systems.owner = actor.name` — only sees risks for their own systems.
-- `security` / `tech_governance`: returns risks where actor has `pending` CA row AND no teammate has already `approved` (team-based: any-one satisfies).
-- `grc_chair`: returns risks where this specific actor has a `pending` CA row (all co-chairs must approve individually).
+- `security` / `tech_governance` / `grc_chair`: returns risks where this specific actor has a `pending` CA row. (The old team-based filter that hid risks once any teammate approved was removed — a reviewer who withdraws must be able to re-approve even if a teammate is still approved.)
 - `engineer` (and any other role): returns only Drafts where `created_by = actor.id`.
 
-**Draft privacy**: a Draft is private to its creator for **both reads and writes** — admins get no bypass. `routes/risks.js` centralises this in one predicate, `isHiddenDraft(actor, row)`, used by `GET /api/risks/:id` and `PATCH /api/risks/:id` (and the `GET /api/risks` list applies the same rule in SQL). Non-creators receive **404** (not 403) on direct read or edit, so the endpoint never leaks a draft's existence. If you change who may see a draft, change `isHiddenDraft` and the list query together.
+**Draft privacy**: a Draft is private to its creator for **both reads and writes** — admins get no bypass. `routes/risks.js` centralises this in one predicate, `isHiddenDraft(actor, row)`, used by `GET /api/risks/:id`, `PATCH /api/risks/:id`, and `DELETE /api/risks/:id` (and the `GET /api/risks` list applies the same rule in SQL). Non-creators receive **404** (not 403) on direct read, edit, or delete, so the endpoint never leaks a draft's existence. If you change who may see a draft, change `isHiddenDraft` and the list query together.
 
-**Dashboard access control**: engineers see only risks they created; `biz_owner` users see only risks for systems they own (matched via `systems.owner = actor.name`). This filtering is applied in `GET /api/risks` — the same `isHiddenDraft` predicate plus a role-specific ownership filter.
+**Dashboard access control**: engineers see all non-Draft risks (team visibility) plus their own Drafts; `biz_owner` users see non-Draft risks for systems they own plus their own Drafts (matched via `systems.owner = actor.name`). All other roles see all non-Draft risks plus their own Drafts. This filtering is applied in `GET /api/risks`.
 
-**Analytics access**: restricted to `security`, `tech_governance`, and `grc_chair`. The nav item is hidden for other roles via a `roles` Set on the NAV entry in `Layout.jsx`; `Analytics.jsx` also redirects to `/` on mount if the current user's role is not in that set. When adding other role-gated nav items, follow the same `roles: new Set([...])` pattern on the NAV entry.
+**Analytics access**: restricted to `security`, `tech_governance`, and `grc_chair` — enforced on **both** the backend (`GET /api/analytics` returns 403 for other roles) and the frontend (nav item hidden; `Analytics.jsx` redirects to `/` on mount). `ANALYTICS_ROLES` is the shared constant — defined once in `UserContext.jsx` and imported by `Layout.jsx` and `Analytics.jsx`. When adding other role-gated nav items, follow the same pattern: export the set from `UserContext.jsx` and apply it to the NAV entry's `roles` field.
 
 ### Notifications (`notifications.js`)
 
