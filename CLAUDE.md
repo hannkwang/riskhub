@@ -57,8 +57,10 @@ bypassed). The Dockerfile installs **both** dependency trees (root + `server/`),
 runs `npm run build`, and starts `node server/index.js`, which serves the API and
 the static `dist/` from a single port. `better-sqlite3` needs `python3/make/g++`
 (the alpine image installs them). `ANTHROPIC_API_KEY` is set in Railway's Variables
-(never committed). There is no persistent volume, so the SQLite DB resets to seed
-data on every redeploy — acceptable because the data is all synthetic.
+(never committed). A Railway Volume is mounted at `/app/data`; the env var
+`DB_PATH=/app/data/riskhub.db` points `db.js` there so the SQLite file survives
+redeploys. Without `DB_PATH` the server falls back to `server/riskhub.db` (local dev
+default). On startup, `db.js` logs the resolved path: `[db] opening database at …`.
 
 GitHub Actions run CodeQL and Fortify SAST scans (`.github/workflows/`) on push;
 `SECURITY.md` documents the reporting policy.
@@ -199,7 +201,7 @@ allTeamsApproved() → auto-transition to Approved
 The Workflow.jsx progress path shows `x/3` for Concurrent Review where each of the 3 teams counts as one unit (security=any-one, TGA=any-one, GRC=all).
 
 Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/transition` with the `TRANSITIONS` map in `workflow.js`. Concurrent Review uses separate endpoints:
-- `POST /api/workflow/:id/concurrent` — `{ action: 'approve'|'route_back', comment }`
+- `POST /api/workflow/:id/concurrent` — `{ action: 'approve'|'route_back'|'withdraw', comment }`. `withdraw` resets the caller's own row from `approved` → `pending`; only valid while the risk is still in Concurrent Review.
 - `POST /api/workflow/:id/raiser-respond` — `{ comment }` (creator of any role, or any engineer)
 - `GET /api/workflow/:id/concurrent-status` — returns all reviewer rows with `actor_name`
 
@@ -210,6 +212,10 @@ Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/tran
 - `engineer` (and any other role): returns only Drafts where `created_by = actor.id`.
 
 **Draft privacy**: a Draft is private to its creator for **both reads and writes** — admins get no bypass. `routes/risks.js` centralises this in one predicate, `isHiddenDraft(actor, row)`, used by `GET /api/risks/:id` and `PATCH /api/risks/:id` (and the `GET /api/risks` list applies the same rule in SQL). Non-creators receive **404** (not 403) on direct read or edit, so the endpoint never leaks a draft's existence. If you change who may see a draft, change `isHiddenDraft` and the list query together.
+
+**Dashboard access control**: engineers see only risks they created; `biz_owner` users see only risks for systems they own (matched via `systems.owner = actor.name`). This filtering is applied in `GET /api/risks` — the same `isHiddenDraft` predicate plus a role-specific ownership filter.
+
+**Analytics access**: restricted to `security`, `tech_governance`, and `grc_chair`. The nav item is hidden for other roles via a `roles` Set on the NAV entry in `Layout.jsx`; `Analytics.jsx` also redirects to `/` on mount if the current user's role is not in that set. When adding other role-gated nav items, follow the same `roles: new Set([...])` pattern on the NAV entry.
 
 ### Notifications (`notifications.js`)
 
