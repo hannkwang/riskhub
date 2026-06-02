@@ -92,7 +92,7 @@ src/
     Layout.jsx         # Sidebar + topbar shell; role-switcher; NotificationBell; ROLE_COLORS map
     ui.jsx             # Shared primitives: Badge, RiskBadge, StageBadge, Avatar, Button, Card, KpiCard, etc.
   screens/
-    Dashboard.jsx         # Risk table; 3 KPI cards (high open risks, SLA breaches, expiring soon)
+    Dashboard.jsx         # Risk table; 3 KPI cards (high open risks, SLA breaches, expiring soon); CSV export (respects role-based visibility)
     NewRisk.jsx           # Risk creation form: title + description + AI review panel; Save Draft + Submit
     Workflow.jsx          # Risk detail: stage transitions, concurrent review panel, x/3 progress path
     WorkflowOverview.jsx  # Kanban board at /workflow; timeline filter (6m / custom)
@@ -188,9 +188,9 @@ System Owner → Concurrent Review / Draft:
   reject / request_changes → Draft
 
 Concurrent Review (parallel, independent):
-  security        → approve / route_back  (ANY ONE from security team satisfies the team)
-  tech_governance → approve / route_back  (ANY ONE from TGA team satisfies the team)
-  grc_chair       → approve / route_back  (ALL co-chairs must individually approve)
+  security        → approve / route_back / withdraw  (ANY ONE from security team satisfies the team)
+  tech_governance → approve / route_back / withdraw  (ANY ONE from TGA team satisfies the team)
+  grc_chair       → approve / route_back / withdraw  (ALL co-chairs must individually approve)
   creator         → raiser_respond (resets all routed_back → pending; any role, not just engineer)
 
 allTeamsApproved() → auto-transition to Approved
