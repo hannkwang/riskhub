@@ -8,12 +8,14 @@ import {
 import { useUser, ROLE_LABELS } from '../contexts/UserContext';
 import { api } from '../lib/api';
 
+const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
+
 const NAV = [
   { to: '/',           label: 'Dashboard',    icon: LayoutDashboard },
   { to: '/new',        label: 'New Risk',      icon: PlusCircle },
   { to: '/approvals',  label: 'My Approvals',  icon: CheckSquare },
   { to: '/workflow',   label: 'Workflow',       icon: Shield },
-  { to: '/analytics',  label: 'Analytics',      icon: BarChart2 },
+  { to: '/analytics',  label: 'Analytics',      icon: BarChart2, roles: ANALYTICS_ROLES },
 ];
 
 const ADMIN_NAV = [
@@ -226,7 +228,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {NAV.map((item) => (
+          {NAV.filter(item => !item.roles || (currentUser && item.roles.has(currentUser.role))).map((item) => (
             <NavItem key={item.to} {...item} onClick={() => setSidebarOpen(false)} />
           ))}
 

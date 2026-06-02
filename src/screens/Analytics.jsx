@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, RiskBadge } from '../components/ui';
 import { AlertTriangle, Clock, CheckCircle, Users, RotateCcw, ChevronRight, CalendarClock } from 'lucide-react';
 import { api } from '../lib/api';
+import { useUser } from '../contexts/UserContext';
+
+const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
 
 function sixMonthsAgo() {
   const d = new Date();
@@ -44,10 +47,16 @@ function StatusDot({ status }) {
 }
 
 export default function Analytics() {
+  const { currentUser } = useUser();
+  const navigate = useNavigate();
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [dateMode, setDateMode] = useState('6m');
   const [customDate, setCustomDate] = useState(sixMonthsAgo());
+
+  useEffect(() => {
+    if (currentUser && !ANALYTICS_ROLES.has(currentUser.role)) navigate('/', { replace: true });
+  }, [currentUser, navigate]);
 
   const fromDate = dateMode === '6m' ? sixMonthsAgo() : customDate;
 
