@@ -428,6 +428,7 @@ export default function Workflow() {
                         {c.action === 'route_back'      && <Badge variant="warning" size="xs">needs info</Badge>}
                         {c.action === 'raiser_respond'  && <Badge variant="info"    size="xs">response</Badge>}
                         {c.action === 'auto_approve'    && <Badge variant="success" size="xs">all approved</Badge>}
+                        {c.action === 'withdraw'        && <Badge variant="default"   size="xs">withdrew approval</Badge>}
                       </div>
                       <p className="text-sm text-slate-600 mt-1 leading-relaxed">{c.comment}</p>
                     </div>
@@ -489,7 +490,14 @@ export default function Workflow() {
           {isConcurrentReviewer && myApprovalRow && (
             <div className="mt-3">
               {myApprovalRow.status === 'approved' ? (
-                <p className="text-xs text-emerald-600 text-center font-medium">You have approved this risk.</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                    <Check size={12} /> You have approved this risk.
+                  </span>
+                  <Button variant="secondary" size="sm" onClick={() => concurrentAct('withdraw')} disabled={acting}>
+                    <RotateCcw size={13} /> Withdraw
+                  </Button>
+                </div>
               ) : myApprovalRow.status === 'routed_back' ? (
                 <p className="text-xs text-amber-600 text-center font-medium">You routed this back — awaiting response from the raiser.</p>
               ) : (

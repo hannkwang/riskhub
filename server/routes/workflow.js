@@ -169,8 +169,8 @@ router.post('/:id/concurrent', (req, res) => {
   }
 
   const { action, comment } = req.body;
-  if (!['approve', 'route_back'].includes(action)) {
-    return res.status(400).json({ error: 'action must be approve or route_back' });
+  if (!['approve', 'route_back', 'withdraw'].includes(action)) {
+    return res.status(400).json({ error: 'action must be approve, route_back, or withdraw' });
   }
   if (action === 'route_back' && !comment?.trim()) {
     return res.status(400).json({ error: 'A comment is required when routing back' });
@@ -189,6 +189,22 @@ router.post('/:id/concurrent', (req, res) => {
   }
 
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+  if (action === 'withdraw') {
+    if (myRow.status !== 'approved') {
+      return res.status(400).json({ error: 'You can only withdraw an approval you have already given' });
+    }
+    db.transaction(() => {
+      db.prepare('UPDATE concurrent_approvals SET status = ?, comment = NULL, updated_at = ? WHERE risk_id = ? AND actor_id = ?')
+        .run('pending', now, risk.id, actor.id);
+      db.prepare(`
+        INSERT INTO workflow_history (risk_id, from_stage, to_stage, actor_id, actor_name, action, comment, created_at)
+        VALUES (?,?,?,?,?,?,?,?)
+      `).run(risk.id, 'Concurrent Review', 'Concurrent Review', actor.id, actor.name, 'withdraw', comment || null, now);
+    })();
+    return res.json({ risk_id: risk.id, action: 'withdraw', actor: actor.name, status: 'pending' });
+  }
+
   const newStatus = action === 'approve' ? 'approved' : 'routed_back';
 
   db.transaction(() => {
