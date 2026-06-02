@@ -98,7 +98,7 @@ function ApprovalCard({ item, onAction, isConcurrent, actionLoading }) {
             </div>
             {item.residual_score && (
               <div className="bg-white rounded-lg border border-slate-200 p-3">
-                <div className="text-xs text-slate-500 mb-1">Submitter residual</div>
+                <div className="text-xs text-slate-500 mb-1">User Proposed Residual Risk</div>
                 <RiskBadge level={item.residual_level} />
                 <div className="text-xs text-slate-400 mt-1 font-mono">{item.residual_score} · I:{item.residual_impact} · L:{item.residual_likelihood}</div>
               </div>

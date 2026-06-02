@@ -328,7 +328,7 @@ export default function Workflow() {
             </div>
             {risk.residual_score && (
               <div className="bg-slate-50 rounded-lg p-3">
-                <div className="text-xs text-slate-500 mb-1">Submitter residual</div>
+                <div className="text-xs text-slate-500 mb-1">User Proposed Residual Risk</div>
                 <RiskBadge level={computeLevel(risk.residual_score)} />
                 <div className="text-xs text-slate-400 mt-1 font-mono">{risk.residual_score} · I:{risk.residual_impact} · L:{risk.residual_likelihood}</div>
               </div>
@@ -344,7 +344,7 @@ export default function Workflow() {
                 }`}>
                   <div className="flex items-center gap-1 mb-1">
                     <Sparkles size={11} className="text-violet-600" />
-                    <span className="text-xs text-slate-500">AI residual</span>
+                    <span className="text-xs text-slate-500">AI Proposed Residual Risk</span>
                   </div>
                   <RiskBadge level={risk.ai_residual_level} />
                   <div className="text-xs text-slate-400 mt-1 font-mono">{risk.ai_residual_score} · I:{risk.ai_residual_impact} · L:{risk.ai_residual_likelihood}</div>
