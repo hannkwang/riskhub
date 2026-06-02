@@ -3,9 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { PageHeader, Card, Badge, RiskBadge } from '../components/ui';
 import { AlertTriangle, Clock, CheckCircle, Users, RotateCcw, ChevronRight, CalendarClock } from 'lucide-react';
 import { api } from '../lib/api';
-import { useUser } from '../contexts/UserContext';
-
-const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
+import { useUser, ANALYTICS_ROLES } from '../contexts/UserContext';
 
 function sixMonthsAgo() {
   const d = new Date();

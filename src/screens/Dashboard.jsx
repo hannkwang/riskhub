@@ -122,7 +122,7 @@ export default function Dashboard() {
     a.href = url;
     a.download = `riskhub-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   }
 
   function SortHeader({ col, children }) {

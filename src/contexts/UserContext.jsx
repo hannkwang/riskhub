@@ -3,6 +3,8 @@ import { api } from '../lib/api';
 
 const UserContext = createContext(null);
 
+export const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
+
 const ROLE_LABELS = {
   engineer:       'Engineer',
   biz_owner:      'System Owner',

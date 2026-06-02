@@ -77,14 +77,12 @@ router.get('/', (req, res) => {
   if (owner) { sql += ' AND owner = ?'; params.push(owner); }
   if (created_by) { sql += ' AND created_by = ?'; params.push(created_by); }
 
-  // Role-based visibility: engineers see only their own risks; system owners
-  // see only risks for systems they own (plus draft privacy for both).
-  // All other roles (security, TGA, GRC, admin) retain full visibility.
+  // Role-based visibility:
+  //   engineer:  all non-Draft risks (team visibility) + their own Drafts
+  //   biz_owner: non-Draft risks for their systems + their own Drafts
+  //   others:    all non-Draft risks + their own Drafts
   if (actor) {
-    if (actor.role === 'engineer') {
-      sql += ' AND created_by = ?';
-      params.push(actor.id);
-    } else if (actor.role === 'biz_owner') {
+    if (actor.role === 'biz_owner') {
       sql += " AND (stage != 'Draft' OR created_by = ?) AND system_name IN (SELECT name FROM systems WHERE owner = ?)";
       params.push(actor.id, actor.name);
     } else {
@@ -296,6 +294,7 @@ router.delete('/:id', (req, res) => {
 
   const row = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Risk not found' });
+  if (isHiddenDraft(actor, row)) return res.status(404).json({ error: 'Risk not found' });
 
   db.transaction(() => {
     db.prepare('DELETE FROM concurrent_approvals WHERE risk_id = ?').run(req.params.id);

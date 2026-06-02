@@ -1,7 +1,10 @@
 const express = require('express');
 const db = require('../db');
+const { requireActor } = require('../lib/auth');
 
 const router = express.Router();
+
+const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
 
 function median(arr) {
   if (!arr.length) return null;
@@ -19,6 +22,11 @@ function daysFrom(isoStr) {
 
 // GET /api/analytics
 router.get('/', (req, res) => {
+  const actor = requireActor(req, res);
+  if (!actor) return;
+  if (!ANALYTICS_ROLES.has(actor.role)) {
+    return res.status(403).json({ error: 'Analytics is restricted to Security, Tech Governance, and GRC Co-Chair' });
+  }
   const { from_date } = req.query;
   // Normalise to a SQLite-comparable datetime string; default = no filter
   const fromFilter = from_date ? `${from_date} 00:00:00` : null;

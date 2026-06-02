@@ -284,15 +284,6 @@ router.get('/queue/:role', (req, res) => {
     const actor = getActor(req);
     if (!actor) return res.status(401).json({ error: 'Missing or unknown X-Riskhub-User header' });
 
-    // For team-based roles (security, TGA): hide risks once any teammate has approved.
-    // For grc_chair: only hide once THIS specific person has approved.
-    const teamFilter = TEAM_BASED_ROLES.has(role)
-      ? `AND NOT EXISTS (
-           SELECT 1 FROM concurrent_approvals ca2
-           WHERE ca2.risk_id = r.id AND ca2.role = '${role}' AND ca2.status = 'approved'
-         )`
-      : '';
-
     rows = db.prepare(`
       SELECT r.*, (
         SELECT MAX(wh.created_at) FROM workflow_history wh
@@ -301,7 +292,6 @@ router.get('/queue/:role', (req, res) => {
       FROM risks r
       JOIN concurrent_approvals ca ON ca.risk_id = r.id AND ca.actor_id = ? AND ca.status = 'pending'
       WHERE r.stage = 'Concurrent Review'
-      ${teamFilter}
       ORDER BY stage_entered_at ASC
     `).all(actor.id);
   } else if (role === 'biz_owner') {

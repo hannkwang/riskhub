@@ -5,10 +5,8 @@ import {
   Users, Database, Shield, Bell, Search, Menu, X, ChevronDown,
   Check, RotateCcw, AlertTriangle, Clock, FileText,
 } from 'lucide-react';
-import { useUser, ROLE_LABELS } from '../contexts/UserContext';
+import { useUser, ROLE_LABELS, ANALYTICS_ROLES } from '../contexts/UserContext';
 import { api } from '../lib/api';
-
-const ANALYTICS_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
 
 const NAV = [
   { to: '/',           label: 'Dashboard',    icon: LayoutDashboard },
