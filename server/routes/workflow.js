@@ -330,6 +330,8 @@ router.get('/queue/:role', (req, res) => {
     try { mitigations = JSON.parse(r.mitigations || '[]'); } catch {}
 
     const inherentScore = r.inherent_score || (r.impact * r.likelihood);
+    const residualScore = r.residual_impact && r.residual_likelihood
+      ? r.residual_impact * r.residual_likelihood : null;
     function computeLevel(s) { return s >= 15 ? 'High' : s >= 9 ? 'Medium' : s >= 4 ? 'Low' : 'Very Low'; }
 
     return {
@@ -337,7 +339,12 @@ router.get('/queue/:role', (req, res) => {
       owner: r.owner, team: r.team, system: r.system_name,
       impact: r.impact, likelihood: r.likelihood,
       score: inherentScore, level: computeLevel(inherentScore),
+      residual_impact: r.residual_impact || null,
+      residual_likelihood: r.residual_likelihood || null,
+      residual_score: residualScore,
+      residual_level: residualScore ? computeLevel(residualScore) : null,
       stage: r.stage, mitigations,
+      justification: r.justification || null,
       daysInStage, slaRemaining, slaBreached: slaRemaining < 0,
       awaitingSince: daysInStage === 0 ? 'just now' : `${daysInStage}d ago`,
       lastComment: lastH?.comment || null,

@@ -5,6 +5,7 @@ import {
   AlertTriangle, Sparkles, X, RotateCcw, Users, Trash2,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatDate } from '../lib/time';
 import { useUser } from '../contexts/UserContext';
 import { Badge, RiskBadge, Avatar, Button, Card, Divider } from '../components/ui';
 
@@ -370,10 +371,27 @@ export default function Workflow() {
                   <li key={i} className="flex items-start gap-2.5 text-sm">
                     <Check size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
                     <span className="text-slate-700 flex-1">{m.text}</span>
+                    {m.type && <span className="text-xs text-slate-400 flex-shrink-0 capitalize">{m.type}</span>}
                     <span className="text-xs text-slate-400 flex-shrink-0">{m.owner} · {m.due}</span>
                   </li>
                 ))}
               </ul>
+            </>
+          )}
+
+          {risk.justification && (
+            <>
+              <Divider className="mb-4 mt-4" />
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Justification</div>
+              <p className="text-sm text-slate-700 leading-relaxed">{risk.justification}</p>
+            </>
+          )}
+
+          {risk.expiresAt && (
+            <>
+              <Divider className="mb-4 mt-4" />
+              <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Approval Expires</div>
+              <p className="text-sm text-slate-700">{formatDate(risk.expiresAt)}</p>
             </>
           )}
         </Card>
