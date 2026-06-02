@@ -1,7 +1,9 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const db = new Database(process.env.DB_PATH || path.join(__dirname, 'riskhub.db'));
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'riskhub.db');
+console.log('[db] opening database at', dbPath);
+const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
