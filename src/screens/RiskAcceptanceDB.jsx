@@ -193,8 +193,7 @@ export default function RiskAcceptanceDB() {
       case 'title':         av = (a.title || '').toLowerCase(); bv = (b.title || '').toLowerCase(); break;
       case 'owner':         av = (a.owner || '').toLowerCase(); bv = (b.owner || '').toLowerCase(); break;
       case 'score':         av = a.score ?? -1;    bv = b.score ?? -1;    break;
-      case 'residual_score':   av = a.residual_score ?? -1;    bv = b.residual_score ?? -1;    break;
-      case 'ai_residual_score':av = a.ai_residual_score ?? -1; bv = b.ai_residual_score ?? -1; break;
+      case 'residual_score':av = a.residual_score ?? -1; bv = b.residual_score ?? -1; break;
       case 'stage':         av = STAGE_ORDER[a.stage] ?? 99; bv = STAGE_ORDER[b.stage] ?? 99; break;
       case 'updated_at':    av = a.updated_at || ''; bv = b.updated_at || ''; break;
       case 'expiresAt':     av = a.expiresAt || ''; bv = b.expiresAt || ''; break;
@@ -289,9 +288,8 @@ export default function RiskAcceptanceDB() {
                   <SortHeader label="ID"       col="id"            sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-32" />
                   <SortHeader label="Title"    col="title"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} />
                   <SortHeader label="Owner"    col="owner"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-36 hidden md:table-cell" />
-                  <SortHeader label="Inherent" col="score"         sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-24" />
-                  <SortHeader label="Residual"    col="residual_score"    sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-24 hidden md:table-cell" />
-                  <SortHeader label="AI Residual" col="ai_residual_score" sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-28 hidden lg:table-cell" />
+                  <SortHeader label="Inherent Risk" col="score"          sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-28" />
+                  <SortHeader label="Residual Risk" col="residual_score" sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} align="center" className="w-28 hidden md:table-cell" />
                   <SortHeader label="Stage"       col="stage"             sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-36 hidden sm:table-cell" />
                   <SortHeader label="Updated"  col="updated_at"    sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-28 hidden lg:table-cell" />
                   <SortHeader label="Expires"  col="expiresAt"     sortCol={sortCol} sortAsc={sortAsc} onSort={toggleSort} className="w-28 hidden xl:table-cell" />
@@ -320,11 +318,6 @@ export default function RiskAcceptanceDB() {
                         ? <RiskBadge level={r.residual_level} />
                         : <span className="text-xs text-slate-300">—</span>}
                     </td>
-                    <td className="px-3 py-3 text-center hidden lg:table-cell">
-                      {r.ai_residual_level
-                        ? <RiskBadge level={r.ai_residual_level} />
-                        : <span className="text-xs text-slate-300">—</span>}
-                    </td>
                     <td className="px-4 py-3 hidden sm:table-cell"><StageBadge stage={r.stage} /></td>
                     <td className="px-4 py-3 text-xs text-slate-400 hidden lg:table-cell">{timeAgo(r.updated_at)}</td>
                     <td className="px-4 py-3 hidden xl:table-cell">
@@ -349,7 +342,7 @@ export default function RiskAcceptanceDB() {
                   </tr>
                 ))}
                 {filtered.length === 0 && !loading && (
-                  <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">No risks match.</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">No risks match.</td></tr>
                 )}
               </tbody>
             </table>
