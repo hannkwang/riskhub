@@ -101,6 +101,30 @@ export default function Dashboard() {
     else { setSortCol(col); setSortAsc(true); }
   }
 
+  function exportCsv() {
+    const headers = ['ID', 'Title', 'System', 'Owner', 'Team', 'Impact', 'Likelihood', 'Inherent Score', 'Inherent Level', 'Residual Score', 'Residual Level', 'AI Residual Score', 'AI Residual Level', 'Stage', 'Updated', 'Expires'];
+    const escape = (v) => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = filtered.map(r => [
+      r.id, r.title, r.system, r.owner, r.team,
+      r.impact, r.likelihood, r.inherent_score, r.level,
+      r.residual_score ?? '', r.residual_level ?? '',
+      r.ai_residual_score ?? '', r.ai_residual_level ?? '',
+      r.stage, r.updated_at ? r.updated_at.split(' ')[0] : '', r.expiresAt ?? '',
+    ].map(escape).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `riskhub-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function SortHeader({ col, children }) {
     const active = sortCol === col;
     return (
@@ -121,7 +145,7 @@ export default function Dashboard() {
         subtitle="All risk assessments across teams"
         actions={
           <>
-            <Button variant="secondary" size="sm">
+            <Button variant="secondary" size="sm" onClick={exportCsv}>
               <Download size={14} /> Export
             </Button>
             <Link to="/new">
