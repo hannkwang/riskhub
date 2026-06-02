@@ -303,7 +303,7 @@ export default function RiskAcceptanceDB() {
                       <span className="font-mono text-xs text-slate-500">{r.id}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-slate-800 line-clamp-1">{r.title}</div>
+                      <div className="text-sm font-medium text-slate-800 line-clamp-2">{r.title}</div>
                       <div className="text-xs text-slate-400 mt-0.5">{r.system}</div>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
