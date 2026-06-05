@@ -37,6 +37,18 @@ function computeLevel(score) {
   return 'Very Low';
 }
 
+// Mirrors the server's allTeamsApproved() per-team rule (workflow.js). A team is
+// satisfied when it has no non-waived members (all waived, or none seeded) — or,
+// for an "any one" team (security/TGA) at least one non-waived member approved,
+// and for an "all required" team (GRC) every non-waived member approved.
+function isTeamSatisfied(members, anyOne) {
+  const nonWaived = members.filter(r => !r.waived);
+  if (nonWaived.length === 0) return true;
+  return anyOne
+    ? nonWaived.some(r => r.status === 'approved')
+    : nonWaived.every(r => r.status === 'approved');
+}
+
 function StatusPip({ status, waived }) {
   if (waived && status !== 'approved') return <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full"><AlertTriangle size={10} /> Waived</span>;
   if (status === 'approved')    return <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><Check size={10} /> Approved</span>;
@@ -250,18 +262,9 @@ export default function Workflow() {
                       {stageName}
                     </div>
                     {stageName === 'Concurrent Review' && isActive && (() => {
-                      const secRows = concurrentStatus.filter(r => r.role === 'security');
-                      const nonWaivedSec = secRows.filter(r => !r.waived);
-                      const secOk = nonWaivedSec.some(r => r.status === 'approved') || nonWaivedSec.length === 0;
-
-                      const tgaRows = concurrentStatus.filter(r => r.role === 'tech_governance');
-                      const nonWaivedTga = tgaRows.filter(r => !r.waived);
-                      const tgaOk = nonWaivedTga.some(r => r.status === 'approved') || nonWaivedTga.length === 0;
-
-                      const grcRows = concurrentStatus.filter(r => r.role === 'grc_chair');
-                      const nonWaivedGrc = grcRows.filter(r => !r.waived);
-                      const grcOk = nonWaivedGrc.every(r => r.status === 'approved');
-
+                      const secOk = isTeamSatisfied(concurrentStatus.filter(r => r.role === 'security'), true);
+                      const tgaOk = isTeamSatisfied(concurrentStatus.filter(r => r.role === 'tech_governance'), true);
+                      const grcOk = isTeamSatisfied(concurrentStatus.filter(r => r.role === 'grc_chair'), false);
                       const teamsApproved = [secOk, tgaOk, grcOk].filter(Boolean).length;
                       return (
                         <div className="text-xs text-slate-400">{teamsApproved}/3 approved</div>
@@ -294,12 +297,8 @@ export default function Workflow() {
             <div className="grid sm:grid-cols-3 gap-4">
               {groups.map(({ role, label, anyOne }) => {
                 const members = concurrentStatus.filter(r => r.role === role);
-                const nonWaivedMembers = members.filter(r => !r.waived);
-                const allMembersWaived = members.length > 0 && nonWaivedMembers.length === 0;
-                const hasActiveApproval = anyOne
-                  ? nonWaivedMembers.some(r => r.status === 'approved')
-                  : nonWaivedMembers.length > 0 && nonWaivedMembers.every(r => r.status === 'approved');
-                const teamApproved = hasActiveApproval || allMembersWaived;
+                const teamApproved = isTeamSatisfied(members, anyOne);
+                const allMembersWaived = members.length > 0 && members.every(r => r.waived);
                 return (
                   <div key={role} className={`rounded-xl border p-3 ${teamApproved ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
                     <div className="flex items-center justify-between mb-2">

@@ -199,6 +199,12 @@ router.post('/:id/concurrent', (req, res) => {
   if (!myRow) {
     return res.status(403).json({ error: 'You are not a required reviewer for this risk' });
   }
+  // A waived reviewer is treated as absent: they cannot approve or route back until
+  // TGA removes the waiver. This keeps the (waived=1, status='approved') state
+  // unreachable, so allTeamsApproved() never has to count a waived approval.
+  if (myRow.waived && action !== 'withdraw') {
+    return res.status(400).json({ error: 'You have been waived from this review and cannot act until the waiver is removed' });
+  }
 
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
