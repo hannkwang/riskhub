@@ -9,20 +9,32 @@ const CONCURRENT_ROLES = new Set(['security', 'tech_governance', 'grc_chair']);
 // Roles where ANY ONE member approving satisfies the team requirement
 const TEAM_BASED_ROLES = new Set(['security', 'tech_governance']);
 
-// Returns true when all three groups have their approval requirement met:
-//   security:        at least 1 approved
-//   tech_governance: at least 1 approved
-//   grc_chair:       ALL co-chairs must individually approve
+// Returns true when all three groups have their approval requirement met.
+// Waived reviewers are excluded from each team's requirement.
+//   security:        ≥1 non-waived approved, OR all waived
+//   tech_governance: ≥1 non-waived approved, OR all waived
+//   grc_chair:       ALL non-waived must have approved (empty set → satisfied)
 function allTeamsApproved(riskId) {
-  const secOk = db.prepare(
-    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND status = 'approved'"
-  ).get(riskId).n > 0;
-  const tgaOk = db.prepare(
-    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'tech_governance' AND status = 'approved'"
-  ).get(riskId).n > 0;
-  const grcPending = db.prepare(
-    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'grc_chair' AND status != 'approved'"
+  const secApproved = db.prepare(
+    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND status = 'approved' AND (waived IS NULL OR waived = 0)"
   ).get(riskId).n;
+  const secNonWaived = db.prepare(
+    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND (waived IS NULL OR waived = 0)"
+  ).get(riskId).n;
+  const secOk = secApproved > 0 || secNonWaived === 0;
+
+  const tgaApproved = db.prepare(
+    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'tech_governance' AND status = 'approved' AND (waived IS NULL OR waived = 0)"
+  ).get(riskId).n;
+  const tgaNonWaived = db.prepare(
+    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'tech_governance' AND (waived IS NULL OR waived = 0)"
+  ).get(riskId).n;
+  const tgaOk = tgaApproved > 0 || tgaNonWaived === 0;
+
+  const grcPending = db.prepare(
+    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'grc_chair' AND status != 'approved' AND (waived IS NULL OR waived = 0)"
+  ).get(riskId).n;
+
   return secOk && tgaOk && grcPending === 0;
 }
 
@@ -232,6 +244,61 @@ router.post('/:id/concurrent', (req, res) => {
   })();
 
   res.json({ risk_id: risk.id, action, actor: actor.name, status: newStatus });
+});
+
+// POST /api/workflow/:id/waive-reviewer  — TGA only; waives a concurrent reviewer due to absence
+router.post('/:id/waive-reviewer', (req, res) => {
+  const actor = requireActor(req, res);
+  if (!actor) return;
+
+  if (actor.role !== 'tech_governance') {
+    return res.status(403).json({ error: 'Only Tech Governance Assurance users can waive a reviewer' });
+  }
+
+  const { actor_id, waived, reason } = req.body;
+  if (!actor_id) return res.status(400).json({ error: 'actor_id is required' });
+  if (typeof waived !== 'boolean') return res.status(400).json({ error: 'waived must be a boolean' });
+  if (waived && !reason?.trim()) return res.status(400).json({ error: 'reason is required when waiving a reviewer' });
+
+  const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
+  if (!risk) return res.status(404).json({ error: 'Risk not found' });
+  if (risk.stage !== 'Concurrent Review') {
+    return res.status(400).json({ error: 'Risk is not in Concurrent Review stage' });
+  }
+
+  const targetRow = db.prepare(
+    'SELECT * FROM concurrent_approvals WHERE risk_id = ? AND actor_id = ?'
+  ).get(risk.id, actor_id);
+  if (!targetRow || !CONCURRENT_ROLES.has(targetRow.role)) {
+    return res.status(400).json({ error: 'Target user is not a concurrent reviewer for this risk' });
+  }
+
+  const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const waivedInt = waived ? 1 : 0;
+  const action = waived ? 'reviewer_waived' : 'reviewer_waiver_removed';
+
+  db.transaction(() => {
+    db.prepare(
+      'UPDATE concurrent_approvals SET waived = ?, waive_reason = ?, updated_at = ? WHERE risk_id = ? AND actor_id = ?'
+    ).run(waivedInt, waived ? reason.trim() : null, now, risk.id, actor_id);
+
+    db.prepare(`
+      INSERT INTO workflow_history (risk_id, from_stage, to_stage, actor_id, actor_name, action, comment, created_at)
+      VALUES (?,?,?,?,?,?,?,?)
+    `).run(risk.id, 'Concurrent Review', 'Concurrent Review', actor.id, actor.name, action, reason?.trim() || null, now);
+
+    if (waived && allTeamsApproved(risk.id)) {
+      const expiresAt = computeExpiry();
+      db.prepare('UPDATE risks SET stage = ?, updated_at = ?, expires_at = ? WHERE id = ?')
+        .run('Approved', now, expiresAt, risk.id);
+      db.prepare(`
+        INSERT INTO workflow_history (risk_id, from_stage, to_stage, actor_id, actor_name, action, comment, created_at)
+        VALUES (?,?,?,?,?,?,?,?)
+      `).run(risk.id, 'Concurrent Review', 'Approved', 'system', 'System', 'auto_approve', 'All reviewers approved or waived', now);
+    }
+  })();
+
+  res.json({ risk_id: risk.id, actor_id, waived: waivedInt, action, actor: actor.name });
 });
 
 // POST /api/workflow/:id/raiser-respond  — engineer responds to route-backs

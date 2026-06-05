@@ -37,6 +37,7 @@ export const api = {
   getConcurrentStatus:(id)         => req('GET',  `/workflow/${id}/concurrent-status`),
   concurrentAction:   (id, body)   => req('POST', `/workflow/${id}/concurrent`, body),
   raiserRespond:      (id, body)   => req('POST', `/workflow/${id}/raiser-respond`, body),
+  waiveReviewer:      (id, body)   => req('POST', `/workflow/${id}/waive-reviewer`, body),
 
   // AI Review
   reviewRisk: (body) => req('POST', '/review', body),

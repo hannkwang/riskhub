@@ -37,7 +37,8 @@ function computeLevel(score) {
   return 'Very Low';
 }
 
-function StatusPip({ status }) {
+function StatusPip({ status, waived }) {
+  if (waived && status !== 'approved') return <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full"><AlertTriangle size={10} /> Waived</span>;
   if (status === 'approved')    return <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><Check size={10} /> Approved</span>;
   if (status === 'routed_back') return <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full"><RotateCcw size={10} /> Needs info</span>;
   return <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full"><Clock size={10} /> Pending</span>;
@@ -56,6 +57,9 @@ export default function Workflow() {
   const [loading, setLoading]           = useState(true);
   const [acting, setActing]             = useState(false);
   const [deleting, setDeleting]         = useState(false);
+  const [waiveInputActorId, setWaiveInputActorId] = useState(null);
+  const [waiveReason, setWaiveReason]             = useState('');
+  const [waiveActing, setWaiveActing]             = useState(false);
 
   useEffect(() => { if (!id) navigate('/'); }, [id, navigate]);
 
@@ -117,6 +121,17 @@ export default function Workflow() {
       setComment('');
     } catch (e) { alert(`Failed: ${e.message}`); }
     finally { setActing(false); }
+  }
+
+  async function waiveReviewer(actorId, waived, reason) {
+    setWaiveActing(true);
+    try {
+      await api.waiveReviewer(risk.id, { actor_id: actorId, waived, reason });
+      await reload();
+      setWaiveInputActorId(null);
+      setWaiveReason('');
+    } catch (e) { alert(`Failed: ${e.message}`); }
+    finally { setWaiveActing(false); }
   }
 
   if (loading) return <div className="px-6 py-12 text-center text-sm text-slate-400">Loading…</div>;
@@ -236,10 +251,18 @@ export default function Workflow() {
                       {stageName}
                     </div>
                     {stageName === 'Concurrent Review' && isActive && (() => {
-                      const secOk  = concurrentStatus.some(r => r.role === 'security'        && r.status === 'approved');
-                      const tgaOk  = concurrentStatus.some(r => r.role === 'tech_governance' && r.status === 'approved');
+                      const secRows = concurrentStatus.filter(r => r.role === 'security');
+                      const nonWaivedSec = secRows.filter(r => !r.waived);
+                      const secOk = nonWaivedSec.some(r => r.status === 'approved') || nonWaivedSec.length === 0;
+
+                      const tgaRows = concurrentStatus.filter(r => r.role === 'tech_governance');
+                      const nonWaivedTga = tgaRows.filter(r => !r.waived);
+                      const tgaOk = nonWaivedTga.some(r => r.status === 'approved') || nonWaivedTga.length === 0;
+
                       const grcRows = concurrentStatus.filter(r => r.role === 'grc_chair');
-                      const grcOk  = grcRows.length > 0 && grcRows.every(r => r.status === 'approved');
+                      const nonWaivedGrc = grcRows.filter(r => !r.waived);
+                      const grcOk = nonWaivedGrc.every(r => r.status === 'approved');
+
                       const teamsApproved = [secOk, tgaOk, grcOk].filter(Boolean).length;
                       return (
                         <div className="text-xs text-slate-400">{teamsApproved}/3 approved</div>
@@ -272,7 +295,10 @@ export default function Workflow() {
             <div className="grid sm:grid-cols-3 gap-4">
               {groups.map(({ role, label, anyOne }) => {
                 const members = concurrentStatus.filter(r => r.role === role);
-                const teamApproved = anyOne && members.some(r => r.status === 'approved');
+                const nonWaivedMembers = members.filter(r => !r.waived);
+                const teamApproved = anyOne
+                  ? nonWaivedMembers.some(r => r.status === 'approved') || nonWaivedMembers.length === 0
+                  : nonWaivedMembers.every(r => r.status === 'approved');
                 return (
                   <div key={role} className={`rounded-xl border p-3 ${teamApproved ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
                     <div className="flex items-center justify-between mb-2">
@@ -294,10 +320,45 @@ export default function Workflow() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-xs font-medium text-slate-800">{row.actor_name}</span>
-                              <StatusPip status={row.status} />
+                              <StatusPip status={row.status} waived={!!row.waived} />
                             </div>
-                            {row.comment && (
+                            {row.waived && row.waive_reason && (
+                              <p className="text-xs text-orange-600 mt-0.5 italic">TGA: {row.waive_reason}</p>
+                            )}
+                            {!row.waived && row.comment && (
                               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed italic">"{row.comment}"</p>
+                            )}
+                            {currentUser?.role === 'tech_governance' && (
+                              <div className="mt-1">
+                                {waiveInputActorId === row.actor_id ? (
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={waiveReason}
+                                      onChange={e => setWaiveReason(e.target.value)}
+                                      placeholder="Reason for absence (e.g. hospitalisation, course)…"
+                                      className="w-full text-xs px-2 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <div className="flex gap-1">
+                                      <Button size="xs" onClick={() => waiveReviewer(row.actor_id, true, waiveReason)} disabled={waiveActing || !waiveReason.trim()}>
+                                        Confirm
+                                      </Button>
+                                      <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(null); setWaiveReason(''); }} disabled={waiveActing}>
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : row.waived ? (
+                                  <Button size="xs" variant="ghost" onClick={() => waiveReviewer(row.actor_id, false, '')} disabled={waiveActing}>
+                                    Remove waiver
+                                  </Button>
+                                ) : (
+                                  <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(row.actor_id); setWaiveReason(''); }} disabled={waiveActing}>
+                                    Waive
+                                  </Button>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -428,7 +489,9 @@ export default function Workflow() {
                         {c.action === 'route_back'      && <Badge variant="warning" size="xs">needs info</Badge>}
                         {c.action === 'raiser_respond'  && <Badge variant="info"    size="xs">response</Badge>}
                         {c.action === 'auto_approve'    && <Badge variant="success" size="xs">all approved</Badge>}
-                        {c.action === 'withdraw'        && <Badge variant="default"   size="xs">withdrew approval</Badge>}
+                        {c.action === 'withdraw'              && <Badge variant="default"   size="xs">withdrew approval</Badge>}
+                        {c.action === 'reviewer_waived'       && <Badge variant="warning" size="xs">reviewer waived</Badge>}
+                        {c.action === 'reviewer_waiver_removed' && <Badge variant="info"  size="xs">waiver removed</Badge>}
                       </div>
                       <p className="text-sm text-slate-600 mt-1 leading-relaxed">{c.comment}</p>
                     </div>

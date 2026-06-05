@@ -103,6 +103,13 @@ if (!riskCols.includes('ai_residual_impact')) {
   db.prepare('ALTER TABLE risks ADD COLUMN ai_residual_likelihood INTEGER').run();
 }
 
+// 1b. TGA waiver columns on concurrent_approvals
+const caCols = db.prepare('PRAGMA table_info(concurrent_approvals)').all().map(c => c.name);
+if (!caCols.includes('waived')) {
+  db.prepare('ALTER TABLE concurrent_approvals ADD COLUMN waived INTEGER DEFAULT 0').run();
+  db.prepare('ALTER TABLE concurrent_approvals ADD COLUMN waive_reason TEXT').run();
+}
+
 // 2. rml column on systems
 const systemCols = db.prepare('PRAGMA table_info(systems)').all().map(c => c.name);
 if (!systemCols.includes('rml')) {
