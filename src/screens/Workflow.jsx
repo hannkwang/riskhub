@@ -37,16 +37,17 @@ function computeLevel(score) {
   return 'Very Low';
 }
 
-// Mirrors the server's allTeamsApproved() per-team rule (workflow.js). A team is
-// satisfied when it has no non-waived members (all waived, or none seeded) — or,
-// for an "any one" team (security/TGA) at least one non-waived member approved,
-// and for an "all required" team (GRC) every non-waived member approved.
+// Mirrors the server's allTeamsApproved() per-team rule (workflow.js).
+// Security / TGA (anyOne=true): ≥1 non-waived approval required — all-waived never
+// satisfies (quorum rule; TGA cannot waive fellow TGA members).
+// GRC (anyOne=false): every non-waived co-chair must have approved; all-waived = satisfied.
 function isTeamSatisfied(members, anyOne) {
   const nonWaived = members.filter(r => !r.waived);
-  if (nonWaived.length === 0) return true;
-  return anyOne
-    ? nonWaived.some(r => r.status === 'approved')
-    : nonWaived.every(r => r.status === 'approved');
+  if (anyOne) {
+    return nonWaived.some(r => r.status === 'approved');
+  } else {
+    return nonWaived.every(r => r.status === 'approved'); // true for empty array (all-waived GRC)
+  }
 }
 
 function StatusPip({ status, waived }) {

@@ -11,26 +11,23 @@ const TEAM_BASED_ROLES = new Set(['security', 'tech_governance']);
 
 // Returns true when all three groups have their approval requirement met.
 // Waived reviewers are excluded from each team's requirement.
-//   security:        ≥1 non-waived approved, OR all waived
-//   tech_governance: ≥1 non-waived approved, OR all waived
-//   grc_chair:       ALL non-waived must have approved (empty set → satisfied)
+// Quorum rule: security and TGA must each have ≥1 ACTUAL non-waived approval —
+// waiving an entire team does NOT satisfy the requirement (prevents a single TGA
+// actor from bypassing all review by waiving everyone).
+// GRC co-chairs retain the "all non-waived must approve" rule; all-waived is
+// satisfied (co-chair absence handled by TGA waiver, but sec+TGA must still approve).
 function allTeamsApproved(riskId) {
-  const secApproved = db.prepare(
+  // Security: at least one non-waived member must have actually approved
+  const secOk = db.prepare(
     "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND status = 'approved' AND (waived IS NULL OR waived = 0)"
-  ).get(riskId).n;
-  const secNonWaived = db.prepare(
-    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'security' AND (waived IS NULL OR waived = 0)"
-  ).get(riskId).n;
-  const secOk = secApproved > 0 || secNonWaived === 0;
+  ).get(riskId).n > 0;
 
-  const tgaApproved = db.prepare(
+  // TGA: same — TGA cannot waive fellow TGA members so this can never be all-waived
+  const tgaOk = db.prepare(
     "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'tech_governance' AND status = 'approved' AND (waived IS NULL OR waived = 0)"
-  ).get(riskId).n;
-  const tgaNonWaived = db.prepare(
-    "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'tech_governance' AND (waived IS NULL OR waived = 0)"
-  ).get(riskId).n;
-  const tgaOk = tgaApproved > 0 || tgaNonWaived === 0;
+  ).get(riskId).n > 0;
 
+  // GRC: all non-waived co-chairs must have approved (empty set → satisfied)
   const grcPending = db.prepare(
     "SELECT COUNT(*) as n FROM concurrent_approvals WHERE risk_id = ? AND role = 'grc_chair' AND status != 'approved' AND (waived IS NULL OR waived = 0)"
   ).get(riskId).n;
@@ -280,6 +277,12 @@ router.post('/:id/waive-reviewer', (req, res) => {
   }
   if (waived && targetRow.status === 'approved') {
     return res.status(400).json({ error: 'Cannot waive a reviewer who has already approved — their approval stands' });
+  }
+  // TGA cannot waive their own team: at least one TGA approval is always required
+  // (enforced in allTeamsApproved), so removing all TGA non-waived members would
+  // permanently block the risk.
+  if (waived && targetRow.role === 'tech_governance') {
+    return res.status(400).json({ error: 'TGA reviewers cannot be waived — at least one TGA approval is required' });
   }
 
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);

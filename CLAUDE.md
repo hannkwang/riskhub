@@ -194,15 +194,19 @@ Concurrent Review (parallel, independent):
   tech_governance → approve / route_back / withdraw  (ANY ONE from TGA team satisfies the team)
   grc_chair       → approve / route_back / withdraw  (ALL co-chairs must individually approve)
   creator         → raiser_respond (resets all routed_back → pending; any role, not just engineer)
-  tech_governance → waive any reviewer (any team) if absent; sets waived=1 with mandatory reason
+  tech_governance → waive security or grc_chair reviewers if absent; sets waived=1 with mandatory reason
+                   TGA CANNOT waive fellow TGA members (quorum guard — see below)
+  waived reviewer → cannot approve or route_back while waived; may still withdraw a prior approval
 
 allTeamsApproved() → auto-transition to Approved
 ```
 
 `allTeamsApproved(riskId)`: waived reviewers are excluded from each team's requirement.
-- security: ≥1 non-waived approved, OR all members waived
-- tech_governance: ≥1 non-waived approved, OR all members waived
-- grc_chair: all non-waived co-chairs approved (empty set → satisfied)
+- security: **≥1 non-waived approval required** (all-waived never satisfies — quorum)
+- tech_governance: **≥1 non-waived approval required** (TGA cannot waive fellow TGA members, so this is always reachable)
+- grc_chair: all non-waived co-chairs approved (empty set → satisfied — co-chair absence waived by TGA)
+
+**Quorum guarantee:** A single TGA actor cannot unilaterally approve a risk. At minimum, one security approval AND one TGA approval (the actor themselves or a colleague) are always required, regardless of waivers.
 
 Waiving fires `allTeamsApproved()` immediately — if the waiver unblocks all three teams the risk auto-transitions to Approved inside the same transaction. `raiser-respond` resets `routed_back → pending` but does not touch `waived`.
 
