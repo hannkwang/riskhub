@@ -59,7 +59,6 @@ export default function Workflow() {
   const [deleting, setDeleting]         = useState(false);
   const [waiveInputActorId, setWaiveInputActorId] = useState(null);
   const [waiveReason, setWaiveReason]             = useState('');
-  const [waiveActing, setWaiveActing]             = useState(false);
 
   useEffect(() => { if (!id) navigate('/'); }, [id, navigate]);
 
@@ -124,14 +123,14 @@ export default function Workflow() {
   }
 
   async function waiveReviewer(actorId, waived, reason) {
-    setWaiveActing(true);
+    setActing(true);
     try {
       await api.waiveReviewer(risk.id, { actor_id: actorId, waived, reason });
       await reload();
       setWaiveInputActorId(null);
       setWaiveReason('');
     } catch (e) { alert(`Failed: ${e.message}`); }
-    finally { setWaiveActing(false); }
+    finally { setActing(false); }
   }
 
   if (loading) return <div className="px-6 py-12 text-center text-sm text-slate-400">Loading…</div>;
@@ -296,9 +295,11 @@ export default function Workflow() {
               {groups.map(({ role, label, anyOne }) => {
                 const members = concurrentStatus.filter(r => r.role === role);
                 const nonWaivedMembers = members.filter(r => !r.waived);
-                const teamApproved = anyOne
-                  ? nonWaivedMembers.some(r => r.status === 'approved') || nonWaivedMembers.length === 0
-                  : nonWaivedMembers.every(r => r.status === 'approved');
+                const allMembersWaived = members.length > 0 && nonWaivedMembers.length === 0;
+                const hasActiveApproval = anyOne
+                  ? nonWaivedMembers.some(r => r.status === 'approved')
+                  : nonWaivedMembers.length > 0 && nonWaivedMembers.every(r => r.status === 'approved');
+                const teamApproved = hasActiveApproval || allMembersWaived;
                 return (
                   <div key={role} className={`rounded-xl border p-3 ${teamApproved ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
                     <div className="flex items-center justify-between mb-2">
@@ -310,7 +311,9 @@ export default function Workflow() {
                     {teamApproved && (
                       <div className="flex items-center gap-1 mb-2">
                         <Check size={12} className="text-emerald-600" />
-                        <span className="text-xs font-semibold text-emerald-700">Team approved</span>
+                        <span className="text-xs font-semibold text-emerald-700">
+                          {allMembersWaived ? 'All waived' : 'Team approved'}
+                        </span>
                       </div>
                     )}
                     <div className="space-y-2">
@@ -341,20 +344,20 @@ export default function Workflow() {
                                       className="w-full text-xs px-2 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     />
                                     <div className="flex gap-1">
-                                      <Button size="xs" onClick={() => waiveReviewer(row.actor_id, true, waiveReason)} disabled={waiveActing || !waiveReason.trim()}>
+                                      <Button size="xs" onClick={() => waiveReviewer(row.actor_id, true, waiveReason)} disabled={acting || !waiveReason.trim()}>
                                         Confirm
                                       </Button>
-                                      <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(null); setWaiveReason(''); }} disabled={waiveActing}>
+                                      <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(null); setWaiveReason(''); }} disabled={acting}>
                                         Cancel
                                       </Button>
                                     </div>
                                   </div>
                                 ) : row.waived ? (
-                                  <Button size="xs" variant="ghost" onClick={() => waiveReviewer(row.actor_id, false, '')} disabled={waiveActing}>
+                                  <Button size="xs" variant="ghost" onClick={() => waiveReviewer(row.actor_id, false, '')} disabled={acting}>
                                     Remove waiver
                                   </Button>
                                 ) : (
-                                  <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(row.actor_id); setWaiveReason(''); }} disabled={waiveActing}>
+                                  <Button size="xs" variant="ghost" onClick={() => { setWaiveInputActorId(row.actor_id); setWaiveReason(''); }} disabled={acting}>
                                     Waive
                                   </Button>
                                 )}

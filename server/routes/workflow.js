@@ -272,6 +272,9 @@ router.post('/:id/waive-reviewer', (req, res) => {
   if (!targetRow || !CONCURRENT_ROLES.has(targetRow.role)) {
     return res.status(400).json({ error: 'Target user is not a concurrent reviewer for this risk' });
   }
+  if (waived && targetRow.status === 'approved') {
+    return res.status(400).json({ error: 'Cannot waive a reviewer who has already approved — their approval stands' });
+  }
 
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
   const waivedInt = waived ? 1 : 0;
@@ -288,13 +291,19 @@ router.post('/:id/waive-reviewer', (req, res) => {
     `).run(risk.id, 'Concurrent Review', 'Concurrent Review', actor.id, actor.name, action, reason?.trim() || null, now);
 
     if (waived && allTeamsApproved(risk.id)) {
-      const expiresAt = computeExpiry();
-      db.prepare('UPDATE risks SET stage = ?, updated_at = ?, expires_at = ? WHERE id = ?')
-        .run('Approved', now, expiresAt, risk.id);
-      db.prepare(`
-        INSERT INTO workflow_history (risk_id, from_stage, to_stage, actor_id, actor_name, action, comment, created_at)
-        VALUES (?,?,?,?,?,?,?,?)
-      `).run(risk.id, 'Concurrent Review', 'Approved', 'system', 'System', 'auto_approve', 'All reviewers approved or waived', now);
+      // Re-read stage inside the transaction to prevent a TOCTOU race where two
+      // concurrent waive requests both pass the pre-transaction stage check and
+      // both attempt to insert an auto_approve history entry.
+      const currentStage = db.prepare('SELECT stage FROM risks WHERE id = ?').get(risk.id).stage;
+      if (currentStage === 'Concurrent Review') {
+        const expiresAt = computeExpiry();
+        db.prepare('UPDATE risks SET stage = ?, updated_at = ?, expires_at = ? WHERE id = ?')
+          .run('Approved', now, expiresAt, risk.id);
+        db.prepare(`
+          INSERT INTO workflow_history (risk_id, from_stage, to_stage, actor_id, actor_name, action, comment, created_at)
+          VALUES (?,?,?,?,?,?,?,?)
+        `).run(risk.id, 'Concurrent Review', 'Approved', 'system', 'System', 'auto_approve', 'All reviewers approved or waived', now);
+      }
     }
   })();
 
