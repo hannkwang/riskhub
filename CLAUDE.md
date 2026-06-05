@@ -162,6 +162,8 @@ Note: `server/routes/bestpractices.js` exists on disk but is **not mounted** in 
 **concurrent_approvals** — tracks per-reviewer status during Concurrent Review:
 - Primary key: `(risk_id, actor_id)`
 - `status`: `pending | approved | routed_back`
+- `waived`: `0 | 1` — TGA has waived this reviewer's requirement due to absence; does not affect `status`
+- `waive_reason`: mandatory text set when `waived = 1`; cleared to NULL on removal
 - Rows created when System Owner approves (one per active `security`, `tech_governance`, `grc_chair` user)
 - Auto-transition to Approved when `allTeamsApproved()` is satisfied (see Workflow section)
 
@@ -192,18 +194,25 @@ Concurrent Review (parallel, independent):
   tech_governance → approve / route_back / withdraw  (ANY ONE from TGA team satisfies the team)
   grc_chair       → approve / route_back / withdraw  (ALL co-chairs must individually approve)
   creator         → raiser_respond (resets all routed_back → pending; any role, not just engineer)
+  tech_governance → waive any reviewer (any team) if absent; sets waived=1 with mandatory reason
 
 allTeamsApproved() → auto-transition to Approved
 ```
 
-`allTeamsApproved(riskId)`: security ≥1 approved AND tech_governance ≥1 approved AND grc_chair pending-count = 0.
+`allTeamsApproved(riskId)`: waived reviewers are excluded from each team's requirement.
+- security: ≥1 non-waived approved, OR all members waived
+- tech_governance: ≥1 non-waived approved, OR all members waived
+- grc_chair: all non-waived co-chairs approved (empty set → satisfied)
 
-The Workflow.jsx progress path shows `x/3` for Concurrent Review where each of the 3 teams counts as one unit (security=any-one, TGA=any-one, GRC=all).
+Waiving fires `allTeamsApproved()` immediately — if the waiver unblocks all three teams the risk auto-transitions to Approved inside the same transaction. `raiser-respond` resets `routed_back → pending` but does not touch `waived`.
+
+The Workflow.jsx progress path shows `x/3` for Concurrent Review where each of the 3 teams counts as one unit (security=any-one, TGA=any-one, GRC=all). The frontend progress logic mirrors the server rules exactly, filtering out waived rows before evaluating each team.
 
 Stage transitions for Draft/System Owner go through `POST /api/workflow/:id/transition` with the `TRANSITIONS` map in `workflow.js`. Concurrent Review uses separate endpoints:
 - `POST /api/workflow/:id/concurrent` — `{ action: 'approve'|'route_back'|'withdraw', comment }`. `withdraw` resets the caller's own row from `approved` → `pending`; only valid while the risk is still in Concurrent Review.
 - `POST /api/workflow/:id/raiser-respond` — `{ comment }` (creator of any role, or any engineer)
-- `GET /api/workflow/:id/concurrent-status` — returns all reviewer rows with `actor_name`
+- `POST /api/workflow/:id/waive-reviewer` — `{ actor_id, waived: bool, reason }` (TGA only); sets or clears the waiver on any concurrent reviewer row; `reason` is required when `waived: true`.
+- `GET /api/workflow/:id/concurrent-status` — returns all reviewer rows with `actor_name`, `waived`, and `waive_reason`
 
 **Queue endpoint** `GET /api/workflow/queue/:role` behaviour by role:
 - `biz_owner`: JOINs risks to `systems` on `systems.owner = actor.name` — only sees risks for their own systems.
