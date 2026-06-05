@@ -143,8 +143,9 @@ export default function RiskAcceptanceDB() {
   const [systems, setSystems]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]           = useState('');
-  const [filterStage, setFilterStage] = useState('');
-  const [filterLevel, setFilterLevel] = useState('');
+  const [filterStage, setFilterStage]   = useState('');
+  const [filterLevel, setFilterLevel]   = useState('');
+  const [filterSystem, setFilterSystem] = useState('');
   const [dateMode, setDateMode]       = useState('all');
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
@@ -177,8 +178,9 @@ export default function RiskAcceptanceDB() {
   const toCutoff   = dateMode === 'custom' ? dateTo : '';
 
   const filtered = risks.filter(r => {
-    if (filterStage && r.stage !== filterStage) return false;
-    if (filterLevel && r.level !== filterLevel) return false;
+    if (filterStage  && r.stage  !== filterStage)  return false;
+    if (filterLevel  && r.level  !== filterLevel)  return false;
+    if (filterSystem && r.system !== filterSystem) return false;
     if (q && !r.id.toLowerCase().includes(q) && !r.title?.toLowerCase().includes(q) &&
         !r.owner?.toLowerCase().includes(q) && !r.system?.toLowerCase().includes(q)) return false;
     const created = r.created_at ? r.created_at.split(' ')[0] : '';
@@ -236,6 +238,10 @@ export default function RiskAcceptanceDB() {
               <option value="">All levels</option>
               {LEVELS.map(l => <option key={l}>{l}</option>)}
             </Select>
+            <Select value={filterSystem} onChange={e => setFilterSystem(e.target.value)}>
+              <option value="">All systems</option>
+              {systems.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </Select>
             <button
               onClick={() => setExpiredOnly(o => !o)}
               className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
@@ -269,8 +275,8 @@ export default function RiskAcceptanceDB() {
                   className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             )}
-            {(search || filterStage || filterLevel || expiredOnly || dateMode !== 'all') && (
-              <button onClick={() => { setSearch(''); setFilterStage(''); setFilterLevel(''); setExpiredOnly(false); setDateMode('all'); setDateFrom(''); setDateTo(''); }}
+            {(search || filterStage || filterLevel || filterSystem || expiredOnly || dateMode !== 'all') && (
+              <button onClick={() => { setSearch(''); setFilterStage(''); setFilterLevel(''); setFilterSystem(''); setExpiredOnly(false); setDateMode('all'); setDateFrom(''); setDateTo(''); }}
                 className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 ml-auto">
                 <X size={12} /> Clear all
               </button>
